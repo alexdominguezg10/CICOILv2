@@ -1,0 +1,159 @@
+CICOILv2.0 HPC Deployment Package
+==================================
+
+This tarball contains all patched source files, test suite, and utilities
+for deploying CICOILv2.0 (OpenDrift 1.14.9 + CICOIL extensions + photooxidation)
+to the CHAMAN2 HPC system.
+
+File Inventory
+--------------
+
+CORE MODEL (16 files):
+  ciceseoil.py
+    - Main OpenCiceseOil class
+    - 14 API compatibility fixes for OD 1.14.9
+    - 13 new config keys for CICOIL processes
+    - Photooxidation weathering process (new)
+    - Rate constants K_PHOTO_AROM[8] calibrated for Bay of Campeche
+
+  fluid_properties.py
+    - 17-component distillation-cut framework
+    - Cox vapor pressure + Mackay evaporation model
+
+  cicoil_estimations.py
+    - Workaround for ADIOS DB API differences (standalone estimations)
+
+TAMOC COUPLING (3 files):
+  tamoc_plume.py       - Plume class + seed_plume_elements() interface
+  run_tamoc.py         - BPM wrapper function
+  tamoc_chemical_properties.py - Property tables
+
+NEMO READERS (4 files):
+  readers/reader_NEMO_native_v3.py   - CROCO-native variable mapping
+  readers/reader_nemo_combined.py    - Combined multi-file reader
+  readers/reader_nemo_modified.py    - Modified physics (e.g., rotations)
+  readers/reader_nemo_optimized.py   - Performance-optimized variant
+
+EXPORT UTILITIES (1 file):
+  export/io_stat_nc.py - Gridded statistical NetCDF output
+
+DATA FILES (5 files):
+  data/pseudo_chemdata.csv  - 17-component pseudo-component properties
+  data/ChemData.csv         - Full chemical database
+  data/Aij.csv              - Interaction matrix
+  data/Bij.csv              - Interaction matrix (component-specific)
+  data/gas_composition.csv  - Gas phase composition template
+
+TESTING & UTILITIES:
+  test_cicoil_e2e.py        - 20-test suite (T1-T6)
+                              All tests: PASSED
+                              Mass conservation: 100.000%
+                              Component balance: 0.000% error
+
+  download_data.py          - GLORYS12 / ERA5 wind/wave data download helpers
+  plotting.py               - 10+ publication-quality plotting routines
+
+DEPLOYMENT:
+  hpc_migration.md          - Step-by-step deployment guide
+  deploy_on_hpc.sh          - Automated HPC deployment script
+
+Installation Summary
+--------------------
+
+Files to site-packages/opendrift/:
+  ✓ models/openoil/ciceseoil.py (130 KB)
+  ✓ models/openoil/fluid_properties.py (19 KB)
+  ✓ models/openoil/cicoil_estimations.py (13 KB)
+  ✓ models/openoil/tamoc_*.py (3 files, 26 KB)
+  ✓ models/openoil/data/*.csv (5 files, 200 KB)
+  ✓ readers/reader_nemo_*.py (4 files, 63 KB)
+  ✓ export/io_stat_nc.py (5 KB)
+
+New Config Keys:
+  processes:evaporation
+  processes:photooxidation (NEW)
+  processes:spreading
+  processes:subsea_dissolution
+  processes:emulsification
+  processes:dispersion
+  processes:biodegradation
+  processes:surface_dissolution
+  [+ 20 additional drift/spreading/entrainment keys]
+
+New Element Variables:
+  mass_photooxidized (kg)      — NEW
+  fraction_photooxidized (%)   — NEW
+  [+ 17-component per-particle tracking: comp_ali_G1...G8, comp_arom_G1...G8, comp_residue]
+
+API Fixes Applied (14 total)
+----------------------------
+
+1.  adios.computation → adios_db.computation (imports)
+2.  adios.util.estimations → standalone cicoil_estimations.py
+3.  adios.oil_name_alias → getattr() guard
+4.  CONFIG_LEVEL_* import from opendrift.config
+5.  max_water_fraction → _cicoil_max_water_fraction_override
+6.  self.get_environment() → self.env.get_environment()
+7.  self.Density / self.KinematicViscosity initialization (NOAA mode)
+8.  Element ID indexing: 1-based → 0-based (BC-2 fix)
+9.  __set_seed_config__() for seed:oil_type (mode guard fix)
+10. Mode.Config → Mode.Ready transition in seed_plume_elements()
+11. pyproj import: basereader.pyproj → direct import pyproj
+12. get_oil_budget() xarray/masked-array compatibility
+13. _set_config_default() for required_profiles_z_range workaround
+14. seed_plume_elements() environment finalization fallback (temp=28°C default)
+
+Photooxidation Process (NEW)
+----------------------------
+
+Aromatic groups G1–G8 photooxidized by solar UV when at surface.
+
+Rate: dM_i = k_i * E_UV_eff * M_i (kg/timestep)
+  k_i: Per-group rate constant (m² J⁻¹)
+       G1 (benzene)  = 2.9e-8  → t½ ~14 d
+       G2 (toluene)  = 2.0e-8  → t½ ~20 d
+       ...
+       G8 (pyrene+)  = 5.0e-6  → t½ ~hours
+
+  E_UV_eff = I_UV [W/m²] * Δt [s] * f_surface
+
+  I_UV: Synthetic diurnal (cosine solar-zenith model, peak 50 W/m²)
+  f_surface: Delvigne & Sweeney (1988) wave-submergence correction
+
+Configuration
+--------------
+
+Prerequisites on CHAMAN2:
+  ✓ Python 3.10 (cicoil3 conda environment)
+  ✓ OpenDrift 1.9.0 (will be upgraded to 1.14.9 by deploy_on_hpc.sh)
+  ✓ TAMOC 4.1.2 (editable pip install expected)
+  ✓ Standard scientific stack (numpy, scipy, matplotlib, xarray, netCDF4)
+
+Installation Time:
+  - Environment upgrade (pip install opendrift==1.14.9): ~8 min
+  - File copy to site-packages: <1 min
+  - Test suite (20/20): ~6 min
+  - Total: ~15 min
+
+Checksums (sha256)
+------------------
+
+(Generated at deployment time by deploy_on_hpc.sh)
+
+Support
+-------
+
+Contact: adomingu@cicese.edu.mx
+CICESE, Departamento de Oceanografía Física
+
+Session logs & analysis:
+  - session_2026-06-05_CICOIL_analysis.pdf (full code audit)
+  - session_2026-06-06_CICOIL_install_test.pdf (installation & testing)
+  - session_2026-06-06b_seed_plume_fix.pdf (mode guard fix details)
+
+References:
+  - Aeppli et al. (2012) Env. Sci. Technol. 46:13093 (photoox rate constants)
+  - Delvigne & Sweeney (1988) Oil & Chem. Pollut. 4:281 (f_surface model)
+  - OpenDrift 1.14.9 documentation
+  - CICOIL 2023 technical reports
+
