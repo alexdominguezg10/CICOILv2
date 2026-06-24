@@ -73,31 +73,32 @@ if [[ ! -f "$JULIA_PROJECT/Project.toml" ]]; then
     exit 1
 fi
 
-echo "   Installing Julia dependencies (Zarr + CUDA)..."
-julia --project="$JULIA_PROJECT" -e '
-    using Pkg
-    Pkg.instantiate()
-    # Add CUDA if not already present
-    if !haskey(Pkg.project().dependencies, "CUDA")
-        Pkg.add("CUDA")
-    end
-    Pkg.precompile()
-    println("   ✓ Julia packages installed")
-' 2>&1 | grep -E "✓|Updating|Installed|Precompiling|ERROR"
+echo "   Setting up dual CPU/GPU Julia environments..."
+echo "   (separate precompile caches — no recompilation when switching nodes)"
+echo ""
+julia "$JULIA_PROJECT/envs/setup_envs.jl" 2>&1
 
 # ── Step 4: Test CICOILPhysics.jl (Julia) ────────────────────────────────────
 echo ""
 echo "4. Running CICOILPhysics.jl tests..."
 
-julia --project="$JULIA_PROJECT" -e '
-    push!(LOAD_PATH, "'$JULIA_PROJECT'")
+# Detect which env to test with
+if nvidia-smi &>/dev/null; then
+    TEST_ENV="$JULIA_PROJECT/envs/gpu"
+    echo "   GPU detected → testing with envs/gpu"
+else
+    TEST_ENV="$JULIA_PROJECT/envs/cpu"
+    echo "   No GPU → testing with envs/cpu"
+fi
+
+julia --project="$TEST_ENV" -e '
     using CICOILPhysics
     println("   Backend: ", backend_name(backend()))
     println("   Has GPU: ", has_gpu(backend()))
 ' 2>&1
 
 cd "$JULIA_PROJECT"
-julia --project="$JULIA_PROJECT" test/runtests.jl 2>&1
+julia --project="$TEST_ENV" test/runtests.jl 2>&1
 JULIA_TEST_RESULT=$?
 cd "$DEPLOY_DIR"
 
@@ -214,12 +215,17 @@ Julia Backend: $(julia --project="$JULIA_PROJECT" -e 'push!(LOAD_PATH, "'$JULIA_
 Paths:
   Deploy dir:    $DEPLOY_DIR
   Julia project: $JULIA_PROJECT
+  Julia GPU env: $JULIA_PROJECT/envs/gpu
+  Julia CPU env: $JULIA_PROJECT/envs/cpu
   OD site:       $OD_OPENOIL
   Conda env:     $CONDA_ENV
 
 Usage:
   conda activate $CONDA_ENV
-  export JULIA_PROJECT=$JULIA_PROJECT
+
+  # Set Julia env based on node type:
+  export JULIA_PROJECT=$JULIA_PROJECT/envs/gpu   # on GPU nodes
+  export JULIA_PROJECT=$JULIA_PROJECT/envs/cpu   # on CPU nodes
 
   # In Python run script:
   from opendrift.models.openoil.ciceseoil import OpenCiceseOil
@@ -229,6 +235,7 @@ Usage:
   o.set_config('processes:biodegradation', True)
   o.set_config('processes:photooxidation', True)
   # ... configure and run
+  # Julia auto-detects GPU/CPU backend from the active env
 
 EOF
 
@@ -244,9 +251,16 @@ echo "To use in a simulation:"
 echo ""
 echo "  conda activate $CONDA_ENV"
 echo ""
+echo "  # On a GPU node:"
+echo "  export JULIA_PROJECT=$JULIA_PROJECT/envs/gpu"
+echo ""
+echo "  # On a CPU node:"
+echo "  export JULIA_PROJECT=$JULIA_PROJECT/envs/cpu"
+echo ""
 echo "  # In your Python run script:"
 echo "  o.set_config('processes:julia_weathering', True)"
 echo "  o.set_config('julia:project_path', '$JULIA_PROJECT')"
 echo ""
-echo "Julia will auto-detect the H200 GPU and use CUDA kernels."
+echo "Each env has its own precompile cache — no recompilation"
+echo "when switching between CPU and GPU nodes."
 echo ""
