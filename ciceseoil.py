@@ -943,12 +943,28 @@ class OpenCiceseOil(OpenOil):
                 'is not set. Point it to the CICOILPhysics.jl directory.')
         import os
         julia_project = os.path.abspath(julia_project)
-        os.environ.setdefault("JULIA_PROJECT", julia_project)
+
+        # Use JULIA_PROJECT env var if set (e.g. envs/gpu or envs/cpu),
+        # otherwise auto-detect: prefer envs/gpu if it exists, then envs/cpu,
+        # then fall back to the bare project (requires Pkg.instantiate).
+        julia_env = os.environ.get('JULIA_PROJECT', '')
+        if not julia_env:
+            for env in ['envs/gpu', 'envs/cpu']:
+                candidate = os.path.join(julia_project, env)
+                if os.path.isfile(os.path.join(candidate, 'Manifest.toml')):
+                    julia_env = candidate
+                    break
+            if not julia_env:
+                julia_env = julia_project
+        julia_env = os.path.abspath(julia_env)
+        os.environ["JULIA_PROJECT"] = julia_env
+
         from juliacall import Main as jl
-        jl.seval(f'import Pkg; Pkg.activate("{julia_project}", io=devnull)')
+        jl.seval(f'import Pkg; Pkg.activate("{julia_env}", io=devnull)')
         jl.seval('using CICOILPhysics')
         OpenCiceseOil._jl = jl
-        logger.info('CICOILPhysics.jl loaded — backend: %s',
+        logger.info('CICOILPhysics.jl loaded (env: %s) — backend: %s',
+                     julia_env,
                      str(jl.CICOILPhysics.backend_name(jl.CICOILPhysics.backend())))
 
     def _init_julia_state(self):
