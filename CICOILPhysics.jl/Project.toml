@@ -1,0 +1,18 @@
+name = "CICOILPhysics"
+uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+authors = ["Alex Dominguez <adomingu@cicese.edu.mx>"]
+version = "0.2.0"
+
+[deps]
+Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+
+[weakdeps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+
+[extensions]
+CICOILPhysicsCUDAExt = "CUDA"
+
+[compat]
+julia = "1.9"
+Zarr = "0.10"
+CUDA = "5"

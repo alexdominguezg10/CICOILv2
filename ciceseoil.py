@@ -469,6 +469,24 @@ class OpenCiceseOil(OpenOil):
                     'Rate constants increase from G1 (benzene-like) to G8 (pyrene-like).'),
                 'level': CONFIG_LEVEL_BASIC
             },
+            'processes:julia_weathering': {
+                'type': 'bool',
+                'default': False,
+                'description': (
+                    'Offload evaporation, emulsification, biodegradation and '
+                    'photooxidation to CICOILPhysics.jl (Julia). Automatically '
+                    'uses GPU via CUDA.jl when available, otherwise CPU. '
+                    'Requires juliacall Python package and Julia >= 1.9.'),
+                'level': CONFIG_LEVEL_ADVANCED
+            },
+            'julia:project_path': {
+                'type': 'str',
+                'default': '',
+                'description': (
+                    'Path to CICOILPhysics.jl directory containing Project.toml. '
+                    'Required when processes:julia_weathering is True.'),
+                'level': CONFIG_LEVEL_ADVANCED
+            },
             'wave_entrainment:droplet_size_distribution': {
                 'type':
                     'enum',
@@ -908,6 +926,106 @@ class OpenCiceseOil(OpenOil):
         else:
             super(OpenCiceseOil, self).prepare_run()
 
+    # ── Julia/CICOILPhysics backend ─────────────────────────────────────────
+    _jl = None          # juliacall Main — initialised once
+    _jl_state = None    # SimState opaque handle
+
+    def _init_julia_backend(self):
+        """Lazy-init Julia + CICOILPhysics.jl + SimState on first call."""
+        if OpenCiceseOil._jl is not None:
+            return
+        julia_project = self.get_config('julia:project_path')
+        if not julia_project:
+            raise ValueError(
+                'processes:julia_weathering is True but julia:project_path '
+                'is not set. Point it to the CICOILPhysics.jl directory.')
+        import os
+        julia_project = os.path.abspath(julia_project)
+        os.environ.setdefault("JULIA_PROJECT", julia_project)
+        from juliacall import Main as jl
+        jl.seval(f'import Pkg; Pkg.activate("{julia_project}", io=devnull)')
+        jl.seval('using CICOILPhysics')
+        OpenCiceseOil._jl = jl
+        logger.info('CICOILPhysics.jl loaded — backend: %s',
+                     str(jl.CICOILPhysics.backend_name(jl.CICOILPhysics.backend())))
+
+    def _init_julia_state(self):
+        """Allocate Julia SimState from the current oil type."""
+        if OpenCiceseOil._jl_state is not None:
+            return
+        jl = OpenCiceseOil._jl
+        fp = self.fluid_properties
+        OpenCiceseOil._jl_state = jl.CICOILPhysics.py_init_state(
+            N_particles=int(self.num_elements_total()),
+            oil_Mw=np.array(fp.comp_Mw, dtype=np.float32),
+            oil_Tb=np.array(fp.component_boil_temp, dtype=np.float32),
+            oil_mass_frac=np.array(fp.oil_mass_frac, dtype=np.float32),
+            initial_mass_kg=float(np.sum(
+                self.cicese_mass_balance['mass_components'][0])),
+        )
+        logger.info('Julia SimState allocated for %d particles (%s)',
+                     self.num_elements_total(),
+                     str(jl.CICOILPhysics.backend_name(jl.CICOILPhysics.backend())))
+
+    def _julia_weathering_step(self):
+        """Run the 4 weathering kernels via CICOILPhysics.jl."""
+        self._init_julia_backend()
+        self._init_julia_state()
+        jl = OpenCiceseOil._jl
+        state = OpenCiceseOil._jl_state
+
+        mb = self.cicese_mass_balance
+        el = self.elements
+        dt = float(self.time_step.total_seconds())
+        uv_irradiance = float(self._compute_uv_irradiance())
+
+        jl.CICOILPhysics.py_update_weathering(
+            state,
+            el.z.astype(np.float32),
+            el.diameter.astype(np.float32),
+            el.age_seconds.astype(np.float32),
+            el.is_dissolved.astype(np.uint8),
+            el.oil_molar_mass.astype(np.float32),
+            el.oil_density.astype(np.float32),
+            el.spillet_thickness.astype(np.float32),
+            el.water_fraction.astype(np.float32),
+            np.zeros(len(el.z), dtype=np.float32),
+            el.max_water.astype(np.float32),
+            el.mass_oil.astype(np.float32),
+            el.mass_evaporated.astype(np.float32),
+            el.mass_dispersed.astype(np.float32),
+            el.mass_biodegraded.astype(np.float32),
+            el.mass_biodegraded_from_oil.astype(np.float32),
+            el.mass_biodegraded_from_water.astype(np.float32),
+            el.mass_photooxidized.astype(np.float32),
+            el.mass_op_dissolved.astype(np.float32),
+            el.mass_op_degraded.astype(np.float32),
+            mb['mass_components'].astype(np.float32),
+            mb['mass_evaporated'].astype(np.float32),
+            mb['mass_biodegraded'].astype(np.float32),
+            mb['mass_photooxidized'].astype(np.float32),
+            mb['mass_op_dissolved'].astype(np.float32),
+            mb['mass_op_degraded'].astype(np.float32),
+            mb['mass_dissolved'].astype(np.float32),
+            self.environment.sea_water_temperature.astype(np.float32),
+            self.environment.x_wind.astype(np.float32),
+            self.environment.y_wind.astype(np.float32),
+            self.environment.x_sea_water_velocity.astype(np.float32),
+            self.environment.y_sea_water_velocity.astype(np.float32),
+            getattr(self.environment,
+                    'sea_surface_wave_significant_height',
+                    np.zeros_like(el.z, dtype=np.float32)).astype(np.float32),
+            getattr(self.environment,
+                    'sea_surface_wave_period_at_variance_spectral_density_maximum',
+                    np.zeros_like(el.z, dtype=np.float32)).astype(np.float32),
+            uv_irradiance,
+            bool(self.get_config('processes:evaporation')),
+            bool(self.get_config('processes:emulsification')),
+            bool(self.get_config('processes:biodegradation')),
+            bool(self.get_config('processes:photooxidation')),
+            dt,
+        )
+
     def oil_weathering_cicese(self):
         '''Oil weathering scheme adopted from NOAA PyGNOME model:
         https://github.com/NOAA-ORR-ERD/PyGnome
@@ -950,15 +1068,11 @@ class OpenCiceseOil(OpenOil):
         # used by emulsification_cicese() for the viscosity-stability scaling factor.
         self._oil_viscosity_dry = oil_viscosity * np.exp(kv1 * self.elements.fraction_evaporated)
 
+        # ── Processes that always run in Python ────────────────────────────────
         if self.get_config('processes:spreading') is True:
             self.timer_start('main loop:updating elements:oil weathering:spreading')
             self.spreading_cicese()
             self.timer_end('main loop:updating elements:oil weathering:spreading')
-
-        if self.get_config('processes:evaporation') is True:
-            self.timer_start('main loop:updating elements:oil weathering:evaporation')
-            self.evaporation_cicese()
-            self.timer_end('main loop:updating elements:oil weathering:evaporation')
 
         if self.get_config('processes:handle_released_gas') is True:
             self.timer_start('main loop:updating elements:oil weathering:gas_particles')
@@ -970,30 +1084,43 @@ class OpenCiceseOil(OpenOil):
             self.handle_subsea_dissolution()
             self.timer_end('main loop:updating elements:oil weathering:subsea_dissolution')
 
-        if self.get_config('processes:emulsification') is True:
-            self.timer_start('main loop:updating elements:oil weathering:emulsification')
-            self.emulsification_cicese()
-            self.timer_end('main loop:updating elements:oil weathering:emulsification')
-
         if self.get_config('processes:dispersion') is True:
             self.timer_start('main loop:updating elements:oil weathering:dispersion')
             self.dispersion_cicese()
             self.timer_end('main loop:updating elements:oil weathering:dispersion')
-
-        if self.get_config('processes:biodegradation') is True:
-            self.timer_start('main loop:updating elements:oil weathering:biodegradation')
-            self.biodegradation_cicese()
-            self.timer_end('main loop:updating elements:oil weathering:biodegradation')
 
         if self.get_config('processes:surface_dissolution') is True:
             self.timer_start('main loop:updating elements:oil weathering:surface_dissolution')
             self.surface_dissolution()
             self.timer_end('main loop:updating elements:oil weathering:surface_dissolution')
 
-        if self.get_config('processes:photooxidation') is True:
-            self.timer_start('main loop:updating elements:oil weathering:photooxidation')
-            self.photooxidation_cicese()
-            self.timer_end('main loop:updating elements:oil weathering:photooxidation')
+        # ── Evaporation / emulsification / biodegradation / photooxidation ───
+        # When julia_weathering is enabled, all 4 run in a single Julia call.
+        # Otherwise, the original Python methods are called individually.
+        if self.get_config('processes:julia_weathering') is True:
+            self.timer_start('main loop:updating elements:oil weathering:julia_kernels')
+            self._julia_weathering_step()
+            self.timer_end('main loop:updating elements:oil weathering:julia_kernels')
+        else:
+            if self.get_config('processes:evaporation') is True:
+                self.timer_start('main loop:updating elements:oil weathering:evaporation')
+                self.evaporation_cicese()
+                self.timer_end('main loop:updating elements:oil weathering:evaporation')
+
+            if self.get_config('processes:emulsification') is True:
+                self.timer_start('main loop:updating elements:oil weathering:emulsification')
+                self.emulsification_cicese()
+                self.timer_end('main loop:updating elements:oil weathering:emulsification')
+
+            if self.get_config('processes:biodegradation') is True:
+                self.timer_start('main loop:updating elements:oil weathering:biodegradation')
+                self.biodegradation_cicese()
+                self.timer_end('main loop:updating elements:oil weathering:biodegradation')
+
+            if self.get_config('processes:photooxidation') is True:
+                self.timer_start('main loop:updating elements:oil weathering:photooxidation')
+                self.photooxidation_cicese()
+                self.timer_end('main loop:updating elements:oil weathering:photooxidation')
 
 
     def handle_gas_particles(self):
