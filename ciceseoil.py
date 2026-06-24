@@ -482,6 +482,8 @@ class OpenCiceseOil(OpenOil):
             'julia:project_path': {
                 'type': 'str',
                 'default': '',
+                'min_length': 0,
+                'max_length': 1024,
                 'description': (
                     'Path to CICOILPhysics.jl directory containing Project.toml. '
                     'Required when processes:julia_weathering is True.'),
