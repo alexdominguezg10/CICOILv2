@@ -43,8 +43,9 @@ backend_name(::CUDABackend) = "CUDA"
 # thread index. The _body! functions use only scalar indexing and basic math,
 # so they work on both CPU arrays and CuDeviceArrays.
 
-function _cuda_kernel!(body!, args...)
+function _cuda_kernel!(body!, N, args...)
     i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    i > N && return
     body!(i, args...)
     return
 end
@@ -52,7 +53,7 @@ end
 function run_kernel!(::CUDABackend, kernel_body!::Function, N::Int, args...)
     threads = 256
     blocks = cld(N, threads)
-    @cuda blocks=blocks threads=threads _cuda_kernel!(kernel_body!, args...)
+    @cuda blocks=blocks threads=threads _cuda_kernel!(kernel_body!, Int32(N), args...)
     return
 end
 

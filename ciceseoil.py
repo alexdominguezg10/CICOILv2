@@ -975,9 +975,9 @@ class OpenCiceseOil(OpenOil):
         fp = self.fluid_properties
         OpenCiceseOil._jl_state = jl.CICOILPhysics.py_init_state(
             N_particles=int(self.num_elements_total()),
-            oil_Mw=np.array(fp.comp_Mw, dtype=np.float32),
-            oil_Tb=np.array(fp.component_boil_temp, dtype=np.float32),
-            oil_mass_frac=np.array(fp.oil_mass_frac, dtype=np.float32),
+            oil_Mw=np.array(fp.comp_Mw[-17:], dtype=np.float32),
+            oil_Tb=np.array(fp.component_boil_temp[-17:], dtype=np.float32),
+            oil_mass_frac=np.array(fp.oil_mass_frac[-17:], dtype=np.float32),
             initial_mass_kg=float(np.sum(
                 self.cicese_mass_balance['mass_components'][0])),
         )
@@ -994,48 +994,62 @@ class OpenCiceseOil(OpenOil):
 
         mb = self.cicese_mass_balance
         el = self.elements
+        N = len(el.z)
         dt = float(self.time_step.total_seconds())
         uv_irradiance = float(self._compute_uv_irradiance())
 
+        # Mutable float32 buffers — Julia writes results into these
+        buf_mass_oil       = np.array(el.mass_oil, dtype=np.float32)
+        buf_mass_evap      = np.array(el.mass_evaporated, dtype=np.float32)
+        buf_mass_biodeg    = np.array(el.mass_biodegraded, dtype=np.float32)
+        buf_mass_biodeg_oil= np.array(el.mass_biodegraded_from_oil, dtype=np.float32)
+        buf_mass_biodeg_w  = np.array(el.mass_biodegraded_from_water, dtype=np.float32)
+        buf_mass_photoox   = np.array(el.mass_photooxidized, dtype=np.float32)
+        buf_mass_op_diss   = np.array(el.mass_op_dissolved, dtype=np.float32)
+        buf_mass_op_deg    = np.array(el.mass_op_degraded, dtype=np.float32)
+        buf_water_frac     = np.array(el.water_fraction, dtype=np.float32)
+        buf_kvisc          = np.zeros(N, dtype=np.float32)
+        buf_mc             = np.array(mb['mass_components'], dtype=np.float32)
+        buf_me             = np.array(mb['mass_evaporated'], dtype=np.float32)
+        buf_mb             = np.array(mb['mass_biodegraded_from_oil'], dtype=np.float32)
+        buf_mp             = np.array(mb['mass_photooxidized'], dtype=np.float32)
+        buf_mod            = np.array(mb['mass_op_dissolved'], dtype=np.float32)
+        buf_mog            = np.array(mb['mass_op_degraded'], dtype=np.float32)
+
         jl.CICOILPhysics.py_update_weathering(
             state,
-            el.z.astype(np.float32),
-            el.diameter.astype(np.float32),
-            el.age_seconds.astype(np.float32),
-            el.is_dissolved.astype(np.uint8),
-            el.oil_molar_mass.astype(np.float32),
-            el.oil_density.astype(np.float32),
-            el.spillet_thickness.astype(np.float32),
-            el.water_fraction.astype(np.float32),
-            np.zeros(len(el.z), dtype=np.float32),
-            el.max_water.astype(np.float32),
-            el.mass_oil.astype(np.float32),
-            el.mass_evaporated.astype(np.float32),
-            el.mass_dispersed.astype(np.float32),
-            el.mass_biodegraded.astype(np.float32),
-            el.mass_biodegraded_from_oil.astype(np.float32),
-            el.mass_biodegraded_from_water.astype(np.float32),
-            el.mass_photooxidized.astype(np.float32),
-            el.mass_op_dissolved.astype(np.float32),
-            el.mass_op_degraded.astype(np.float32),
-            mb['mass_components'].astype(np.float32),
-            mb['mass_evaporated'].astype(np.float32),
-            mb['mass_biodegraded'].astype(np.float32),
-            mb['mass_photooxidized'].astype(np.float32),
-            mb['mass_op_dissolved'].astype(np.float32),
-            mb['mass_op_degraded'].astype(np.float32),
-            mb['mass_dissolved'].astype(np.float32),
-            self.environment.sea_water_temperature.astype(np.float32),
-            self.environment.x_wind.astype(np.float32),
-            self.environment.y_wind.astype(np.float32),
-            self.environment.x_sea_water_velocity.astype(np.float32),
-            self.environment.y_sea_water_velocity.astype(np.float32),
-            getattr(self.environment,
+            np.array(el.z, dtype=np.float32),
+            np.array(el.diameter, dtype=np.float32),
+            np.array(el.age_seconds, dtype=np.float32),
+            np.array(el.is_dissolved, dtype=np.uint8),
+            np.array(el.oil_molar_mass, dtype=np.float32),
+            np.array(el.oil_density, dtype=np.float32),
+            np.array(el.spillet_thickness, dtype=np.float32),
+            buf_water_frac,
+            buf_kvisc,
+            np.array(el.max_water, dtype=np.float32),
+            buf_mass_oil,
+            buf_mass_evap,
+            np.array(el.mass_dispersed, dtype=np.float32),
+            buf_mass_biodeg,
+            buf_mass_biodeg_oil,
+            buf_mass_biodeg_w,
+            buf_mass_photoox,
+            buf_mass_op_diss,
+            buf_mass_op_deg,
+            buf_mc, buf_me, buf_mb, buf_mp, buf_mod, buf_mog,
+            np.array(mb['mass_dissolved'], dtype=np.float32),
+            np.array(self.environment.sea_water_temperature, dtype=np.float32),
+            np.array(self.environment.x_wind, dtype=np.float32),
+            np.array(self.environment.y_wind, dtype=np.float32),
+            np.array(self.environment.x_sea_water_velocity, dtype=np.float32),
+            np.array(self.environment.y_sea_water_velocity, dtype=np.float32),
+            np.array(getattr(self.environment,
                     'sea_surface_wave_significant_height',
-                    np.zeros_like(el.z, dtype=np.float32)).astype(np.float32),
-            getattr(self.environment,
+                    np.zeros(N, dtype=np.float32)), dtype=np.float32),
+            np.array(getattr(self.environment,
                     'sea_surface_wave_period_at_variance_spectral_density_maximum',
-                    np.zeros_like(el.z, dtype=np.float32)).astype(np.float32),
+                    np.zeros(N, dtype=np.float32)), dtype=np.float32),
             uv_irradiance,
             bool(self.get_config('processes:evaporation')),
             bool(self.get_config('processes:emulsification')),
@@ -1043,6 +1057,24 @@ class OpenCiceseOil(OpenOil):
             bool(self.get_config('processes:photooxidation')),
             dt,
         )
+
+        # Write results back into OpenDrift element arrays
+        el.mass_oil[:]                    = buf_mass_oil
+        el.mass_evaporated[:]             = buf_mass_evap
+        el.mass_biodegraded[:]            = buf_mass_biodeg
+        el.mass_biodegraded_from_oil[:]   = buf_mass_biodeg_oil
+        el.mass_biodegraded_from_water[:] = buf_mass_biodeg_w
+        el.mass_photooxidized[:]          = buf_mass_photoox
+        el.mass_op_dissolved[:]           = buf_mass_op_diss
+        el.mass_op_degraded[:]            = buf_mass_op_deg
+        el.water_fraction[:]              = buf_water_frac
+        el.viscosity[:]                   = buf_kvisc * 1e-6  # cSt → m²/s
+        mb['mass_components'][:]          = buf_mc
+        mb['mass_evaporated'][:]          = buf_me
+        mb['mass_biodegraded_from_oil'][:]= buf_mb
+        mb['mass_photooxidized'][:]       = buf_mp
+        mb['mass_op_dissolved'][:]        = buf_mod
+        mb['mass_op_degraded'][:]         = buf_mog
 
     def oil_weathering_cicese(self):
         '''Oil weathering scheme adopted from NOAA PyGNOME model:
