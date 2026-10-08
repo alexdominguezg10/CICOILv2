@@ -186,6 +186,17 @@ from opendrift.readers.reader_nemo_optimized import Reader as CrocoReader
 o.add_reader(CrocoReader('croco_avg.nc'))
 ```
 
+**Raw CROCO sigma-coordinate output (no preprocessing):**
+```python
+from opendrift.readers.reader_croco_native import Reader as CrocoNative      # installed with readers/*
+from opendrift.readers.reader_netCDF_CF_generic import Reader as CF
+
+ocean = CrocoNative('croco_avg.nc', name='croco')    # or croco_his.nc; native sigma, staggered C-grid
+wind  = CF('wind_cf.nc', name='wind')                # CROCO files carry no atmosphere: supply wind/waves separately
+o.add_reader([ocean, wind])
+```
+`reader_croco_native` subclasses OpenDrift's `reader_ROMS_native`, derives `mask_u`/`mask_v` from `mask_rho` and de-staggers `u`/`v` onto rho points (`destagger=True`, default; `False` = stock behaviour with a half-cell shift). It reads `croco_avg.nc` / `croco_his.nc` as they come out of CROCO; unlike `reader_NEMO_native_v3` it handles sigma coordinates and the C-grid. Ocean variables only; the first `croco_avg.nc` record is at the middle of the first averaging window, so a run cannot start earlier. Validated for surface transport (24 h backward / 48 h forward, 5000 particles: mean separation 0.2 m / 11 m against converted files, versus 2.1 km for the stock reader); subsurface fields are not yet validated (velocity differences of 0.01-0.04 m/s at 20 m depth against the reference). Tested with OpenDrift 1.14.9.
+
 ### Quick verification
 ```python
 from opendrift.models.openoil.ciceseoil import OpenCiceseOil, CiceseOil
@@ -563,6 +574,8 @@ dominant fate process for surface-released MAYA crude in the Bay of Campeche.
 | `test_op_tracking.py` | Oxygenated photoproduct tracking (audit #4; 100 particles, 8 d, SST=29°C, synthetic UV) | mass conservation incl. OP pools rel. err 1.22e-16; `mass_op_dissolved + mass_op_degraded == mass_photooxidized` (OP_DISSOLVED_FRACTION=0.5, exact); `mass_op_degraded > 0` (K_OP_REMOVAL decay active) |
 | `test_emulsification_viscosity.py` | Viscosity-stability scaling: cold oil emulsifies faster than warm; unit-stability recovers viscosity independence; default stability suppresses rate vs unity; EMUL_RATE_SCALE=1.0 recovers stock NOAA rate | 4/4 PASS |
 
+| `test_croco_native_reader.py` | `reader_croco_native` on a synthetic CROCO file: derived `mask_u`/`mask_v`, de-staggered `u`/`v` at a rho node equal the analytic value, `destagger=False` shows the stock half-cell offset | 7/7 PASS |
+
 ### Known caveats
 - **Emulsification**: `max_water=0.9` required at `seed_elements()` for MAYA
   (ADIOS AD02254 has no emulsification data → `emulsification_cicese()` exits
@@ -591,6 +604,7 @@ dominant fate process for surface-released MAYA crude in the Bay of Campeche.
 
 **NEMO/CROCO readers** (`readers/`):
 - `reader_NEMO_native_v3.py`, `reader_nemo_combined.py`, `reader_nemo_modified.py`, `reader_nemo_optimized.py`
+- `reader_croco_native.py` — raw CROCO sigma-coordinate output, de-staggered (subclass of OpenDrift `reader_ROMS_native`)
 
 **Export:**
 - `export/io_stat_nc.py` — gridded statistical NetCDF output

@@ -27,7 +27,8 @@ cicoilv2_deployment/
 │   ├── reader_NEMO_native_v3.py    # active — CROCO native variable names
 │   ├── reader_nemo_optimized.py    # active — generic NEMO-CMEMS names
 │   ├── reader_nemo_combined.py     # alternative — xarray-based, see §8.3
-│   └── reader_nemo_modified.py     # alternative — netCDF4-based, see §8.3
+│   ├── reader_nemo_modified.py     # alternative — netCDF4-based, see §8.3
+│   └── reader_croco_native.py      # active — raw CROCO sigma-coordinate output, see §8.4
 ├── export/
 │   └── io_stat_nc.py           # gridded statistical NetCDF export
 ├── plotting.py                 # publication plotting helpers (8 functions)
@@ -415,6 +416,28 @@ file. The remaining live classes use the same
 
 `reader_nemo_optimized.py` and `reader_NEMO_native_v3.py` remain the primary
 readers for production runs.
+
+### 8.4 `reader_croco_native.Reader` (active — raw CROCO sigma-coordinate output)
+```python
+Reader(filename, name=None, gridfile=None, standard_name_mapping={}, destagger=True, **kwargs)
+```
+Subclass of `opendrift.readers.reader_ROMS_native.Reader` (OpenDrift 1.14.9), so all
+`reader_ROMS_native` arguments and variable mappings apply. It reads `croco_avg.nc` /
+`croco_his.nc` directly (sigma levels, staggered C-grid, `Cs_rho`, `hc`, `Vtransform`,
+`angle`, `lon_rho`/`lat_rho`) and converts sigma to depth on the fly.
+
+| Member | Description |
+|---|---|
+| `destagger` (kwarg, default `True`) | Averages `u` (xi_u) and `v` (eta_v) onto rho points lazily (dask) after opening, end points copied; `False` reproduces the stock reader, which uses them as if on rho nodes (half-cell shift, ~2.3 km on a 1/24 deg grid). |
+| `mask_u`, `mask_v` (properties) | Derived from `mask_rho` (wet only if both neighbouring rho points are wet); CROCO output does not carry them and the stock reader fails with `KeyError: 'mask_u'`. |
+| `destaggered` | `True` once the de-staggering has been applied. |
+
+Differences from `reader_NEMO_native_v3` (§8.1): that reader expects NEMO-style z-level files
+with NEMO variable names and has no sigma-coordinate handling. Ocean variables only; wind and
+waves need other readers. The first record of `croco_avg.nc` is at the middle of the first
+averaging window, so a run cannot start before it. Validated for surface transport (see
+Manual §3 and §9); subsurface fields are not yet validated. A warning is logged when
+OpenDrift is not 1.14.9. Test: `test_croco_native_reader.py`.
 
 ---
 

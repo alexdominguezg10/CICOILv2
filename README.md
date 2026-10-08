@@ -12,6 +12,7 @@ CICOILv2 extends [OpenDrift](https://github.com/OpenDrift/opendrift) (v1.14.9) w
 - **Emulsification** — Fingas & Fieldhouse viscosity-stability model with configurable rate scaling
 - **TAMOC coupling** — Bent plume model output seeded as Lagrangian elements
 - **NEMO/CROCO readers** — Optimized NetCDF readers for regional ocean model output
+- **CROCO native reader** — `reader_croco_native` reads raw CROCO sigma-coordinate output (`croco_avg.nc` / `croco_his.nc`) directly, with correct C-grid de-staggering (see [Reading CROCO native output](#reading-croco-native-output))
 - **97 element variables** tracked per particle
 
 ## Requirements
@@ -84,6 +85,30 @@ o.run(duration=timedelta(hours=24), time_step=timedelta(hours=1))
 budget = o.get_oil_budget()
 ```
 
+## Reading CROCO native output
+
+`readers/reader_croco_native.py` lets OpenDrift/CICOILv2 read **raw CROCO output** (sigma coordinates, staggered Arakawa-C grid) without any preprocessing to z-levels or a regular grid. It is a thin subclass of OpenDrift 1.14.9's `reader_ROMS_native` that fixes two things for CROCO files:
+
+1. CROCO files carry `mask_rho` but no `mask_u`/`mask_v` (the stock reader crashes with `KeyError: 'mask_u'`); both are derived from `mask_rho`.
+2. The stock reader does not de-stagger `u` and `v` and uses them as if they sat on rho nodes, a half-cell (about 2.3 km on a 1/24 deg grid) position error. The new reader averages `u` and `v` onto rho points lazily (dask) right after opening. `destagger=False` reproduces the stock behaviour.
+
+```python
+from opendrift.readers.reader_croco_native import Reader as CrocoNative      # installed with readers/*
+from opendrift.readers.reader_netCDF_CF_generic import Reader as CF
+
+ocean = CrocoNative('croco_avg.nc', name='croco')    # or croco_his.nc; native sigma, staggered C-grid
+wind  = CF('wind_cf.nc', name='wind')                # CROCO files carry no atmosphere: supply wind/waves separately
+o.add_reader([ocean, wind])
+```
+
+Notes:
+- Not to be confused with `reader_NEMO_native_v3.py`, which expects NEMO-style z-level files with NEMO variable names (`vozocrtx`, ...) and does not handle CROCO sigma levels.
+- Ocean variables only; supply wind and waves with another reader.
+- The first record of `croco_avg.nc` is at the middle of the first averaging window (for example 00:32:30 for hourly averages), so a run cannot start before it.
+- Validated for **surface transport**: against an independently converted z-level/regular-grid version of the same files, the same 5000 particles separate by 0.2 m on average (max 2 m) after 24 h backward (hourly hindcast, ~16 km path) and by 11 m on average (max 72 m) after 48 h forward (~87 km path); the stock reader differs by 2.1 km on average (max 9.4 km and 3.9 km). Subsurface fields are **not yet validated**: at 20 m depth velocities differ from that reference by a median 0.01-0.04 m/s (cause not established).
+- About five times slower than reading preprocessed files (reads the raw 3-D output).
+- Written and tested with OpenDrift 1.14.9 (a warning is logged for other versions). Test: `python test_croco_native_reader.py` (synthetic file, 7 checks).
+
 ## Directory structure
 
 ```
@@ -103,11 +128,13 @@ CICOILv2/
 │   ├── reader_nemo_optimized.py
 │   ├── reader_NEMO_native_v3.py
 │   ├── reader_nemo_combined.py
-│   └── reader_nemo_modified.py
+│   ├── reader_nemo_modified.py
+│   └── reader_croco_native.py      # raw CROCO sigma-coordinate output (de-staggered)
 ├── export/
 │   └── io_stat_nc.py         # Gridded statistical NetCDF export
 ├── data/                     # Chemical property CSVs
 ├── test_cicoil_e2e.py        # 30-test end-to-end suite (T1–T8)
+├── test_croco_native_reader.py  # reader_croco_native on a synthetic CROCO file (7 checks)
 ├── test_biodegradation.py
 ├── test_biodegradation_water.py
 ├── test_droplet_size_biodeg.py
