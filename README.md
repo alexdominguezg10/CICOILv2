@@ -32,7 +32,7 @@ conda create -n cicoil python=3.10
 conda activate cicoil
 
 # 2. Install OpenDrift 1.14.9
-pip install opendrift==1.14.9
+pip install opendrift==1.14.9 future   # 'future' provides the `past` module used by fluid_properties.py
 
 # 3. Copy CICOILv2 files into OpenDrift's openoil module
 SITE=$(python -c "import opendrift; print(opendrift.__path__[0])")
@@ -40,6 +40,7 @@ cp ciceseoil.py fluid_properties.py cicoil_estimations.py \
    tamoc_plume.py run_tamoc.py tamoc_chemical_properties.py \
    cicoil_common.py "$SITE/models/openoil/"
 cp -r readers/* "$SITE/readers/"
+mkdir -p "$SITE/models/openoil/data"
 cp -r data/* "$SITE/models/openoil/data/"
 cp export/io_stat_nc.py "$SITE/export/"
 ```
