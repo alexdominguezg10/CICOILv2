@@ -1,0 +1,8 @@
+[deps]
+CICOILPhysics = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+julia = "1.9"
+Zarr = "0.10"
