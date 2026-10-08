@@ -892,7 +892,7 @@ class OpenCiceseOil(OpenOil):
             dt_s = self.time_step.total_seconds() if self.time_step else 3600.0
             v_max = 1.5  # m/s, typical GoM current upper bound
             dx = 1000.0  # m, conservative grid scale estimate
-            for rdr in self.readers.values():
+            for rdr in getattr(self.env, 'readers', getattr(self, 'readers', {})).values():
                 if hasattr(rdr, 'delta_x') and rdr.delta_x is not None:
                     dx = min(dx, rdr.delta_x)
                     break
