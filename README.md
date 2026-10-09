@@ -135,6 +135,7 @@ CICOILv2/
 ├── data/                     # Chemical property CSVs
 ├── test_cicoil_e2e.py        # 30-test end-to-end suite (T1–T8)
 ├── test_croco_native_reader.py  # reader_croco_native on a synthetic CROCO file (7 checks)
+├── test_horizontal_diffusivity.py  # drift:horizontal_diffusivity random walk (4 checks)
 ├── test_biodegradation.py
 ├── test_biodegradation_water.py
 ├── test_droplet_size_biodeg.py

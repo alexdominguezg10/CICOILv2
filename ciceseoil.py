@@ -233,6 +233,15 @@ class OpenCiceseOil(OpenOil):
         'sea_surface_height': {
             'fallback': 0
         },
+        # OD 1.14.9: basemodel.horizontal_diffusion() returns immediately unless
+        # 'horizontal_diffusivity' is in required_variables, and nothing reads
+        # the drift:horizontal_diffusivity config. Without this entry the random
+        # walk was silently disabled. set_config() maps the drift: config onto
+        # this fallback; fallback 0 keeps behaviour unchanged when unused.
+        'horizontal_diffusivity': {
+            'fallback': 0,
+            'important': False
+        },
     }
 
     # OD 1.14.9: required_profiles_z_range is obsolete.
@@ -870,6 +879,15 @@ class OpenCiceseOil(OpenOil):
             super(OpenCiceseOil, self).oil_weathering()
         self.timer_end('main loop:updating elements:oil weathering')
 
+
+    def set_config(self, key, value):
+        """As OpenDrift's set_config, but drift:horizontal_diffusivity (which
+        OpenDrift 1.14.9 never reads) is mirrored onto the environment fallback
+        that horizontal_diffusion() actually uses."""
+        super().set_config(key, value)
+        if (key == 'drift:horizontal_diffusivity'
+                and 'environment:fallback:horizontal_diffusivity' in self._config):
+            super().set_config('environment:fallback:horizontal_diffusivity', value)
 
     def prepare_run(self):
 

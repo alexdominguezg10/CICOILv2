@@ -233,6 +233,7 @@ print("CICOIL OK:", len(o.oiltypes), "oils,", len(o.fluid_properties.composition
 | `drift:profiles_depth` | 20 | Plural key name (OD 1.14.9) |
 | `drift:vertical_advection` | False | |
 | `drift:vertical_mixing` | True | Required for correct photooxidation surface-fraction behavior (§6.2) |
+| `drift:horizontal_diffusivity` | 0 | Random-walk diffusivity [m² s⁻¹]. In OpenDrift 1.14.9 this key is never read and `horizontal_diffusion()` is skipped unless `horizontal_diffusivity` is in `required_variables`; CICOIL adds that variable (fallback 0) and mirrors this key onto `environment:fallback:horizontal_diffusivity`. Spread ≈ √(2 D t). Runs made before this fix had no diffusion whatever the setting. |
 
 ---
 
@@ -574,6 +575,7 @@ dominant fate process for surface-released MAYA crude in the Bay of Campeche.
 | `test_op_tracking.py` | Oxygenated photoproduct tracking (audit #4; 100 particles, 8 d, SST=29°C, synthetic UV) | mass conservation incl. OP pools rel. err 1.22e-16; `mass_op_dissolved + mass_op_degraded == mass_photooxidized` (OP_DISSOLVED_FRACTION=0.5, exact); `mass_op_degraded > 0` (K_OP_REMOVAL decay active) |
 | `test_emulsification_viscosity.py` | Viscosity-stability scaling: cold oil emulsifies faster than warm; unit-stability recovers viscosity independence; default stability suppresses rate vs unity; EMUL_RATE_SCALE=1.0 recovers stock NOAA rate | 4/4 PASS |
 
+| `test_horizontal_diffusivity.py` | Random walk with constant forcing, 6 h, 2000 particles: D=0 gives no spread; D=10 m² s⁻¹ via `drift:horizontal_diffusivity` or via the environment fallback spreads as √(2Dt) (659 m vs 657 m); D=40 spreads 2.00× D=10 | 4/4 PASS |
 | `test_croco_native_reader.py` | `reader_croco_native` on a synthetic CROCO file: derived `mask_u`/`mask_v`, de-staggered `u`/`v` at a rho node equal the analytic value, `destagger=False` shows the stock half-cell offset | 7/7 PASS |
 
 ### Known caveats
