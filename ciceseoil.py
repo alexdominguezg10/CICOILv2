@@ -636,7 +636,7 @@ class OpenCiceseOil(OpenOil):
             np.array([self.elements_scheduled.lat[0]]),
             np.array([0.0]),
         )
-        seawater_temp = float(_env['sea_water_temperature'][0])
+        seawater_temp = float(_env['sea_water_temperature'][0]) + 273.15   # degC -> K
 
         boiling_temp = self.fluid_properties.component_boil_temp
         molar_mass = self.fluid_properties.component_molar_mass
