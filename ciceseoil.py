@@ -44,6 +44,29 @@ try:
 except ImportError:
     pass
 
+#: Volume of oil entrained per unit wave energy dissipation (Delvigne and Sweeney 1988; PyGNOME constants.volume_entrained)
+V_ENTRAIN_ROY = 3.9E-8
+
+
+def roy_dispersed_fraction(c_disp, viscosity, emulsion_density, thickness, dt):
+    """Fraction of the oil mass dispersed in one time step (Delvigne and Sweeney 1988, Roy's constant).
+
+    Same form as PyGNOME (natural_dispersion.disperse_oil_DS): the dispersed mass is
+    C_Roy * c_disp * V_entrain * (1 - Y) * A * dt, and the oil mass of an element is
+    A * emulsion_density * thickness * (1 - Y), so the fraction is
+
+        C_Roy * c_disp * V_entrain * dt / (emulsion_density * thickness)
+
+    with C_Roy = 2400 exp(-73.682 sqrt(nu)), nu the KINEMATIC viscosity (m2/s).
+    c_disp = (wave energy dissipation)**0.57 * breaking fraction; thickness is the
+    emulsion slick thickness (m). The fraction is capped at 1 (all the oil).
+    """
+    C_Roy = 2400.0 * np.exp(-73.682 * np.sqrt(viscosity))
+    thickness = np.where(np.asarray(thickness) > 0, thickness, 1e-3)    # default film thickness if undefined
+    fraction = C_Roy * c_disp * V_ENTRAIN_ROY * dt / (emulsion_density * thickness)
+    return np.minimum(fraction, 1.)
+
+
 # Defining the oil element properties
 class CiceseOil(Oil):
     """Extending Oil with variables relevant for multi pseudo-component oil particles."""
@@ -1287,13 +1310,9 @@ class OpenCiceseOil(OpenOil):
         # https://github.com/NOAA-ORR-ERD/PyGnome/
         c_disp = np.power(self.wave_energy_dissipation(), 0.57) * \
             self.sea_surface_wave_breaking_fraction()
-        # Roy's constant
-        C_Roy = 2400.0 * np.exp(-73.682*np.sqrt(
-            self.elements.viscosity/self.elements.density))
-        v_entrain = 3.9E-8
-        q_disp = C_Roy * c_disp * v_entrain / self.elements.density
-        fraction_dispersed = (q_disp * self.time_step.total_seconds() *
-                         self.elements.density)
+        fraction_dispersed = roy_dispersed_fraction(
+            c_disp, self.elements.viscosity, self.elements.density,
+            self.elements.oil_film_thickness, self.time_step.total_seconds())
         # Wave breaking disperses oil from the surface slick only: oil that is
         # already entrained (z < 0) is not exposed to the surface wave energy.
         fraction_dispersed = np.where(self.elements.z >= 0, fraction_dispersed, 0.)
