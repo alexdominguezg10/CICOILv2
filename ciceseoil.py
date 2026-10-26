@@ -44,6 +44,35 @@ try:
 except ImportError:
     pass
 
+_SLICK_FIELD = None
+
+
+def _slick_field_module():
+    """slick_field.py: sibling module of the package, or the file next to this one (when this file is loaded on its own)."""
+    global _SLICK_FIELD
+    if _SLICK_FIELD is None:
+        try:
+            from . import slick_field as sf
+        except ImportError:
+            import importlib.util
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'slick_field.py')
+            spec = importlib.util.spec_from_file_location('cicoil_slick_field', path)
+            sf = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(sf)
+        _SLICK_FIELD = sf
+    return _SLICK_FIELD
+
+
+def _linear_weights(axis, query):
+    """Dense linear-interpolation matrix (len(query), len(axis)) from the regular axis to the query positions (clamped at the ends)."""
+    idx = np.clip(np.searchsorted(axis, query) - 1, 0, len(axis) - 2)
+    w = np.clip((query - axis[idx]) / (axis[idx + 1] - axis[idx]), 0., 1.)
+    M = np.zeros((len(query), len(axis)))
+    M[np.arange(len(query)), idx] = 1. - w
+    M[np.arange(len(query)), idx + 1] = w
+    return M
+
+
 #: Volume of oil entrained per unit wave energy dissipation (Delvigne and Sweeney 1988; PyGNOME constants.volume_entrained)
 V_ENTRAIN_ROY = 3.9E-8
 
@@ -439,6 +468,54 @@ class OpenCiceseOil(OpenOil):
                     'the Li entrainment is off.',
                 'level': CONFIG_LEVEL_ADVANCED
             },
+            'processes:slick_thickness_model': {
+                'type': 'enum',
+                'enum': ['legacy', 'field'],
+                'default': 'legacy',
+                'description':
+                    'Slick thickness used by the evaporation. legacy: the per-element spillet_thickness '
+                    '(seeding value, or the per-element Nihoul spreading if processes:spreading is True). '
+                    'field: thickness of a gridded slick field (slick_field.py, as in PARCELS_GPU) advected by '
+                    'the surface drift and spread by the porous-medium equation (Fay regime II), fed by the '
+                    'volume of the surface elements; each surface element reads the thickness of its cell. '
+                    'Requires processes:spreading False and processes:julia_weathering False.',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
+            'slick_field:dx': {
+                'type': 'float', 'default': 500., 'min': 10., 'max': 50000., 'units': 'meters',
+                'description': 'Cell size of the slick thickness grid (field model).',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
+            'slick_field:lon_min': {
+                'type': 'float', 'default': -98., 'min': -180., 'max': 180., 'units': 'degrees_east',
+                'description': 'West edge of the slick thickness grid; oil leaving the box is not tracked by the field.',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
+            'slick_field:lon_max': {
+                'type': 'float', 'default': -87., 'min': -180., 'max': 180., 'units': 'degrees_east',
+                'description': 'East edge of the slick thickness grid.',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
+            'slick_field:lat_min': {
+                'type': 'float', 'default': 15., 'min': -90., 'max': 90., 'units': 'degrees_north',
+                'description': 'South edge of the slick thickness grid.',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
+            'slick_field:lat_max': {
+                'type': 'float', 'default': 24.5, 'min': -90., 'max': 90., 'units': 'degrees_north',
+                'description': 'North edge of the slick thickness grid.',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
+            'slick_field:lens_age': {
+                'type': 'float', 'default': 300., 'min': 1., 'max': 86400., 'units': 'seconds',
+                'description': 'Age of the Barenblatt lens in which the volume of a newly surfaced element is deposited.',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
+            'slick_field:drift_update_interval': {
+                'type': 'float', 'default': 3600., 'min': 60., 'max': 86400., 'units': 'seconds',
+                'description': 'Interval at which the surface drift (current + windage) is resampled on the slick grid.',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
             'processes:chemical_dispersion': {
                 'type':
                     'enum',
@@ -782,6 +859,112 @@ class OpenCiceseOil(OpenOil):
         spillet_thickness_new[spillet_thickness_new < film_limit] = film_limit
         self.elements.spillet_thickness[spread] = spillet_thickness_new
         self.elements.spillet_area[spread] = element_volume / spillet_thickness_new
+
+    def _slick_field_init(self):
+        """Grid, drift interpolation and Fay coefficient of the slick thickness field (first call of _slick_field_step)."""
+        if self.get_config('processes:spreading') is True:
+            raise ValueError('processes:slick_thickness_model=field replaces the per-element spreading: set processes:spreading False')
+        if self.get_config('processes:julia_weathering') is True:
+            raise ValueError('processes:slick_thickness_model=field is not implemented for processes:julia_weathering')
+        sf = _slick_field_module()
+        cfg = lambda k: self.get_config('slick_field:' + k)
+        dx = float(cfg('dx'))
+        lon_min, lon_max, lat_min, lat_max = (float(cfg(k)) for k in ('lon_min', 'lon_max', 'lat_min', 'lat_max'))
+        if lon_max <= lon_min or lat_max <= lat_min:
+            raise ValueError('slick_field box: lon_max > lon_min and lat_max > lat_min are required')
+        nx = int(np.ceil((lon_max - lon_min) * sf.KX_M * np.cos(np.deg2rad(0.5 * (lat_min + lat_max))) / dx))
+        ny = int(np.ceil((lat_max - lat_min) * sf.KY_M / dx))
+        grid = sf.Grid(lon_min, lat_min, dx, nx, ny)
+        # Fay coefficient from the volume of all the oil of the run and the density contrast with the sea water
+        ms = np.atleast_1d(self.elements_scheduled.mass_oil)
+        n_total = self.num_elements_total()
+        mass_all = float(np.sum(self.elements.mass_oil)) + (float(np.sum(ms)) if len(ms) > 1 else float(ms[0]) * max(n_total - len(self.elements), 0))
+        rho_oil = float(np.mean(self.elements.oil_density))
+        rho_sw = float(np.mean(self.local_sea_water_density()))
+        D0 = sf.fay_D0(mass_all / rho_oil, (rho_sw - rho_oil) / rho_sw, 9.1e-7)
+        # surface drift is sampled on a 10 km grid and interpolated (separable linear) to the slick grid
+        nxc = max(2, int(np.ceil((lon_max - lon_min) * sf.KX_M * np.cos(np.deg2rad(0.5 * (lat_min + lat_max))) / 10000.)) + 1)
+        nyc = max(2, int(np.ceil((lat_max - lat_min) * sf.KY_M / 10000.)) + 1)
+        lon_c = np.linspace(lon_min, lon_max, nxc); lat_c = np.linspace(lat_min, lat_max, nyc)
+        X, Y, LON, LAT = grid.centres()
+        self._slick = {
+            'sf': sf, 'grid': grid, 'D0': D0, 'h': np.zeros((ny, nx)), 'X': X, 'Y': Y,
+            'lon_c': lon_c, 'lat_c': lat_c,
+            'Wx': _linear_weights(lon_c, LON[0, :]), 'Wy': _linear_weights(lat_c, LAT[:, 0]),
+            'u': np.zeros((ny, nx)), 'v': np.zeros((ny, nx)), 'drift_time': None,
+            'prev_surf': np.zeros(n_total, dtype=bool), 'prev_vol': np.zeros(n_total), 'diag': [], 'step_no': 0}
+        logging.info('slick field: grid %d x %d of %g m, D0 = %.4g, characteristic volume %.1f m3' % (nx, ny, dx, D0, mass_all / rho_oil))
+
+    def _slick_field_drift(self, st):
+        """Surface drift (current + windage) on the slick grid, resampled at the configured interval."""
+        interval = timedelta(seconds=float(self.get_config('slick_field:drift_update_interval')))
+        if st['drift_time'] is not None and self.time - st['drift_time'] < interval:
+            return
+        LON, LAT = np.meshgrid(st['lon_c'], st['lat_c'])
+        env, _, _ = self.env.get_environment(
+            ['x_sea_water_velocity', 'y_sea_water_velocity', 'x_wind', 'y_wind'],
+            self.time, LON.ravel(), LAT.ravel(), np.zeros(LON.size))
+
+        def field(name):
+            return np.ma.filled(np.ma.masked_invalid(np.asarray(env[name], dtype='f8')), 0.).reshape(LON.shape)
+        wdf = float(np.mean(self.elements.wind_drift_factor))
+        uc = field('x_sea_water_velocity') + wdf * field('x_wind')
+        vc = field('y_sea_water_velocity') + wdf * field('y_wind')
+        st['u'] = st['Wy'] @ uc @ st['Wx'].T
+        st['v'] = st['Wy'] @ vc @ st['Wx'].T
+        st['drift_time'] = self.time
+
+    def _slick_field_step(self):
+        """One step of the gridded slick thickness and the thickness read by the evaporation (processes:slick_thickness_model=field).
+
+        As in PARCELS_GPU (slick_couple.couple_step): the field is scaled by B / A (emulsion volume of the elements that were at the
+        surface at the previous call, now and then; entrained and stranded oil leave as a uniform loss), advected with the surface
+        drift and spread (porous-medium equation, Fay regime II), and the volume of the elements that reach the surface (release,
+        resurfacing) is added as Barenblatt lenses. Each surface element then reads the thickness of its cell as spillet_thickness
+        (elements outside the grid keep their value). Land is not treated: volume reaching land cells stays in the field.
+        """
+        if getattr(self, '_slick', None) is None:
+            self._slick_field_init()
+        st = self._slick; sf = st['sf']; grid = st['grid']; el = self.elements
+        surf = np.where(el.z == 0)[0]
+        if len(surf) == 0:
+            return
+        dt = self.time_step.total_seconds()
+        vol = sf.emulsion_volume(el.mass_oil[surf], el.water_fraction[surf], el.oil_density[surf],
+                                 np.asarray(self.local_sea_water_density())[surf])
+        ids = el.ID[surf]
+        was = st['prev_surf'][ids]
+        A = float(st['prev_vol'][st['prev_surf']].sum()); B = float(vol[was].sum())
+        if A > 0:
+            st['h'] = st['h'] * (B / A)
+        self._slick_field_drift(st)
+        umax = float(max(np.abs(st['u']).max(), np.abs(st['v']).max(), 1e-3))
+        nsub = sf.nsub_needed(dt, grid.dx, umax, st['D0'], max(float(st['h'].max()), 1e-6))
+        h, _ = sf.step_field(np, st['h'], st['u'], st['v'], st['D0'], grid.dx, dt, nsub)
+        new = ~was
+        out_new = 0.
+        if new.any():
+            t_inj = float(self.get_config('slick_field:lens_age'))
+            m = sf.lens_stencil(float(vol[new].max()), st['D0'], t_inj, grid.dx)
+            dh, out_new = sf.deposit_lens(np, grid, el.lon[surf][new].astype('f8'), el.lat[surf][new].astype('f8'),
+                                          vol[new].astype('f8'), st['D0'], t_inj, m)
+            h = h + dh
+        st['h'] = h
+        # thickness read by evaporation
+        i = np.floor((el.lon[surf] - grid.lon0) * grid.kx / grid.dx).astype('int64')
+        j = np.floor((el.lat[surf] - grid.lat0) * grid.ky / grid.dx).astype('int64')
+        inside = (i >= 0) & (i < grid.nx) & (j >= 0) & (j < grid.ny)
+        hs = sf.sample(grid, h, el.lon[surf], el.lat[surf], floor=1e-9)
+        sel = surf[inside]
+        el.spillet_thickness[sel] = hs[inside]
+        el.spillet_area[sel] = (el.mass_oil[sel] / el.oil_density[sel]) / hs[inside]
+        # record the surface set for the next call
+        st['prev_surf'][:] = False; st['prev_surf'][ids] = True
+        st['prev_vol'][ids] = vol
+        st['step_no'] += 1
+        if st['step_no'] % 12 == 1:    # diagnostics every 12 steps: [time, A, B, volume outside grid of new lenses, elements outside grid] + sf.diagnostics vector
+            d = sf.diagnostics(np, h, st['X'], st['Y'], grid.dx)
+            st['diag'].append(np.concatenate([[self.time.timestamp(), A, B, float(out_new), float((~inside).sum()), float(vol.sum())], d]))
 
     def local_sea_water_density(self):
         """Sea water density at the temperature and salinity of each element.
@@ -1185,6 +1368,11 @@ class OpenCiceseOil(OpenOil):
         self._oil_viscosity_dry = oil_viscosity * np.exp(kv1 * self.elements.fraction_evaporated)
 
         # ── Processes that always run in Python ────────────────────────────────
+        if self.get_config('processes:slick_thickness_model') == 'field':
+            self.timer_start('main loop:updating elements:oil weathering:slick_field')
+            self._slick_field_step()
+            self.timer_end('main loop:updating elements:oil weathering:slick_field')
+
         if self.get_config('processes:spreading') is True:
             self.timer_start('main loop:updating elements:oil weathering:spreading')
             self.spreading_cicese()
