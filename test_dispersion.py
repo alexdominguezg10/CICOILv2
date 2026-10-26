@@ -8,6 +8,7 @@ Checks:
   1. the sink acts on surface elements (z >= 0) only: submerged elements keep their
      oil mass and their component vector
   2. oil mass is conserved: mass_oil + mass_dispersed unchanged for every element
+  3. processes:dispersion_mode (legacy, transport, budget) switches the Roy sink and the Li entrainment
 
 Run:  python test_dispersion.py   (CICOIL_FILE=/path/ciceseoil.py to test a patched copy)
 """
@@ -56,6 +57,31 @@ check('submerged elements keep their component vector',
 check('surface elements: component vector scaled with the mass loss',
       np.allclose(m.cicese_mass_balance['mass_components'][0].sum(), el.mass_oil[0]))
 check('oil mass conserved (mass_oil + mass_dispersed)', np.allclose(el.mass_oil + el.mass_dispersed, 100.))
+
+# 3: dispersion_mode (legacy / transport / budget)
+o = OpenCiceseOil(weathering_model='noaa', loglevel=50)
+check('default dispersion_mode is legacy', o.get_config('processes:dispersion_mode') == 'legacy')
+try:
+    o.set_config('processes:dispersion_mode', 'nonsense'); bad = False
+except Exception:
+    bad = True
+check('invalid dispersion_mode is rejected', bad)
+
+parent = OpenCiceseOil.__mro__[1]
+calls = []
+_orig_swm = parent.surface_wave_mixing
+parent.surface_wave_mixing = lambda self, dt: calls.append(dt)
+try:
+    for mode, disp, sink, li in [('legacy', True, True, True), ('legacy', False, False, True),
+                                 ('transport', True, False, True), ('transport', False, False, True),
+                                 ('budget', True, True, False), ('budget', False, False, False)]:
+        o.set_config('processes:dispersion_mode', mode); o.set_config('processes:dispersion', disp)
+        del calls[:]
+        o.surface_wave_mixing(900.)
+        check(f'{mode:9s} processes:dispersion={disp!s:5s}: Roy sink {"on " if sink else "off"}, Li entrainment {"on " if li else "off"}',
+              o._roy_sink_enabled() == sink and (len(calls) == 1) == li)
+finally:
+    parent.surface_wave_mixing = _orig_swm
 
 print('\nFAILED: ' + ', '.join(FAILS) if FAILS else '\nALL PASSED')
 sys.exit(1 if FAILS else 0)

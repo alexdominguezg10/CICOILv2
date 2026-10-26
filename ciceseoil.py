@@ -402,6 +402,20 @@ class OpenCiceseOil(OpenOil):
                     'Oil is removed from simulation (dispersed), if entrained as very small droplets.',
                 'level': CONFIG_LEVEL_BASIC
             },
+            'processes:dispersion_mode': {
+                'type': 'enum',
+                'enum': ['legacy', 'transport', 'budget'],
+                'default': 'legacy',
+                'description':
+                    'How natural dispersion by breaking waves is represented. '
+                    'legacy: the Roy mass sink (if processes:dispersion is True) and the Li et al. (2017) '
+                    'entrainment act together, as in earlier versions (the same oil is counted twice). '
+                    'transport: only the entrainment of droplets into the water column (transported, can '
+                    'resurface); the Roy sink is off whatever processes:dispersion says. '
+                    'budget: only the Roy sink (if processes:dispersion is True), as in PyGNOME/ADIOS; '
+                    'the Li entrainment is off.',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
             'processes:chemical_dispersion': {
                 'type':
                     'enum',
@@ -1163,7 +1177,7 @@ class OpenCiceseOil(OpenOil):
             self.handle_subsea_dissolution()
             self.timer_end('main loop:updating elements:oil weathering:subsea_dissolution')
 
-        if self.get_config('processes:dispersion') is True:
+        if self._roy_sink_enabled():
             self.timer_start('main loop:updating elements:oil weathering:dispersion')
             self.dispersion_cicese()
             self.timer_end('main loop:updating elements:oil weathering:dispersion')
@@ -1255,6 +1269,17 @@ class OpenCiceseOil(OpenOil):
         if len(to_deactivate) > 0:
             self.deactivate_elements(to_deactivate, reason='dissolved_biodegraded')
 
+
+    def _roy_sink_enabled(self):
+        """Roy mass sink: processes:dispersion, and not in 'transport' mode."""
+        return (self.get_config('processes:dispersion') is True and
+                self.get_config('processes:dispersion_mode') != 'transport')
+
+    def surface_wave_mixing(self, time_step_seconds):
+        """Li et al. (2017) entrainment of surface oil, except in 'budget' mode."""
+        if self.get_config('processes:dispersion_mode') == 'budget':
+            return
+        super().surface_wave_mixing(time_step_seconds)
 
     def dispersion_cicese(self):
         logging.debug('    Calculating: dispersion - NOAA')
