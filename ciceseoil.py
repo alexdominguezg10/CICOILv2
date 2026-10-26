@@ -746,6 +746,17 @@ class OpenCiceseOil(OpenOil):
         self.elements.spillet_thickness[spread] = spillet_thickness_new
         self.elements.spillet_area[spread] = element_volume / spillet_thickness_new
 
+    def local_sea_water_density(self):
+        """Sea water density at the temperature and salinity of each element.
+
+        OpenDrift's sea_water_density() without arguments returns the density for
+        its defaults (T = 10 degC, S = 35, 1026.95 kg/m3), not for the water the
+        elements are in (e.g. 30.2 degC, S 36.6: 1022.86 kg/m3).
+        """
+        temp = np.asarray(self.environment.sea_water_temperature, dtype='f8')
+        temp = np.where(temp > 100., temp - 273.15, temp)    # environment may be in K
+        sal = np.asarray(self.environment.sea_water_salinity, dtype='f8')
+        return self.sea_water_density(T=temp, S=sal)
 
     def oil_density(self, indices):
 
@@ -1118,7 +1129,7 @@ class OpenCiceseOil(OpenOil):
 
         # Calculate emulsion density
         self.elements.density = (
-            self.elements.water_fraction*self.sea_water_density() +
+            self.elements.water_fraction*self.local_sea_water_density() +
            (1 - self.elements.water_fraction) * self.elements.oil_density)
 
         # Calculate emulsion viscosity
@@ -1278,7 +1289,7 @@ class OpenCiceseOil(OpenOil):
                     significant_wave_height=self.significant_wave_height(),
                     wave_breaking_fraction=self.sea_surface_wave_breaking_fraction(
                     ),
-                    sea_water_density=self.sea_water_density())
+                    sea_water_density=self.local_sea_water_density())
             else:
                 entrainment_rate = oil_wave_entrainment_rate_li2017(
                     dynamic_viscosity=self.elements.viscosity *
@@ -1288,7 +1299,7 @@ class OpenCiceseOil(OpenOil):
                     significant_wave_height=self.significant_wave_height(),
                     wave_breaking_fraction=self.sea_surface_wave_breaking_fraction(
                     ),
-                    sea_water_density=self.sea_water_density())
+                    sea_water_density=self.local_sea_water_density())
             return entrainment_rate
         else:
             logger.error("no entrainment rate mechanism configured")
@@ -1309,9 +1320,9 @@ class OpenCiceseOil(OpenOil):
                 interfacial_tension = self.elements.IFT
             else:
                 interfacial_tension = self.oil_water_interfacial_tension
-            delta_rho = self.sea_water_density() - self.elements.density
+            delta_rho = self.local_sea_water_density() - self.elements.density
             d_o = 4 * (interfacial_tension / (delta_rho * g))**0.5
-            we = (self.sea_water_density() * g *
+            we = (self.local_sea_water_density() * g *
                   self.significant_wave_height() * d_o) / interfacial_tension
             oh = self.elements.viscosity * self.elements.density * (
                 self.elements.density * interfacial_tension *
