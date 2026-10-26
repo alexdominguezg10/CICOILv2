@@ -1269,6 +1269,9 @@ class OpenCiceseOil(OpenOil):
         q_disp = C_Roy * c_disp * v_entrain / self.elements.density
         fraction_dispersed = (q_disp * self.time_step.total_seconds() *
                          self.elements.density)
+        # Wave breaking disperses oil from the surface slick only: oil that is
+        # already entrained (z < 0) is not exposed to the surface wave energy.
+        fraction_dispersed = np.where(self.elements.z >= 0, fraction_dispersed, 0.)
         oil_mass_loss = fraction_dispersed*self.elements.mass_oil
 
         self.cicese_mass_balance['mass_components'][self.elements.ID, :] = \
