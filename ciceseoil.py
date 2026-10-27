@@ -116,9 +116,9 @@ class CiceseOil(Oil):
         ('DOR', {'dtype': np.float32,           # Dispersant to Oil Ratio
                          'units': 'unitless',
                          'default': 0}),
-        ('IFT', {'dtype': np.float32,           # Oil - Water interfacial tension
-                 'units': 'Nm',
-                 'default': 30.}),
+        ('IFT', {'dtype': np.float32,           # Oil - Water interfacial tension (N/m; the Li 2017 rate and the droplet spectrum need N/m)
+                 'units': 'N/m',
+                 'default': 0.03}),
         ('max_water', {'dtype': np.float32,     # Maximum water content
                  'units': 'unitless',
                  'default': 0}),
@@ -2583,7 +2583,7 @@ class OpenCiceseOil(OpenOil):
         else:
             time_used_fraction = min(time_frac_ssdi * application_steps * time_step / seed_duration, 1.0)
 
-        IFT_untreated = self.oiltype.oil_water_surface_tension() * 1000.
+        IFT_untreated = self.oiltype.oil_water_surface_tension()      # N/m, same unit as treated_IFT_and_WC
         max_WC_untreated = self.get_max_water_content()
         number_treated = round(number * time_used_fraction * application_rate_fraction)
         number_untreated = number - number_treated
