@@ -511,6 +511,15 @@ class OpenCiceseOil(OpenOil):
                 'description': 'Age of the Barenblatt lens in which the volume of a newly surfaced element is deposited.',
                 'level': CONFIG_LEVEL_ADVANCED
             },
+            'slick_field:evaporation_thickness': {
+                'type': 'enum', 'enum': ['oil', 'emulsion'], 'default': 'oil',
+                'description':
+                    'Thickness the evaporation reads from the slick field. The field holds emulsion volume per area '
+                    '(oil + entrained water). oil: oil volume per area, h * V_oil / V_emulsion (what the per-element '
+                    'spreading uses: mass_oil / oil_density per area), so the evaporation acts on the oil layer of an '
+                    'emulsified slick. emulsion: the cell thickness as it is (behaviour of commit 66bce53, job 17821).',
+                'level': CONFIG_LEVEL_ADVANCED
+            },
             'slick_field:drift_update_interval': {
                 'type': 'float', 'default': 3600., 'min': 60., 'max': 86400., 'units': 'seconds',
                 'description': 'Interval at which the surface drift (current + windage) is resampled on the slick grid.',
@@ -878,7 +887,13 @@ class OpenCiceseOil(OpenOil):
         # Fay coefficient from the volume of all the oil of the run and the density contrast with the sea water
         ms = np.atleast_1d(self.elements_scheduled.mass_oil)
         n_total = self.num_elements_total()
-        mass_all = float(np.sum(self.elements.mass_oil)) + (float(np.sum(ms)) if len(ms) > 1 else float(ms[0]) * max(n_total - len(self.elements), 0))
+        if len(ms) > 1:
+            m_sched = float(np.sum(ms))
+        elif len(ms) == 1:
+            m_sched = float(ms[0]) * max(n_total - len(self.elements), 0)
+        else:                       # instantaneous release: every element is already active
+            m_sched = 0.
+        mass_all = float(np.sum(self.elements.mass_oil)) + m_sched
         rho_oil = float(np.mean(self.elements.oil_density))
         rho_sw = float(np.mean(self.local_sea_water_density()))
         D0 = sf.fay_D0(mass_all / rho_oil, (rho_sw - rho_oil) / rho_sw, 9.1e-7)
@@ -956,8 +971,12 @@ class OpenCiceseOil(OpenOil):
         inside = (i >= 0) & (i < grid.nx) & (j >= 0) & (j < grid.ny)
         hs = sf.sample(grid, h, el.lon[surf], el.lat[surf], floor=1e-9)
         sel = surf[inside]
-        el.spillet_thickness[sel] = hs[inside]
-        el.spillet_area[sel] = (el.mass_oil[sel] / el.oil_density[sel]) / hs[inside]
+        h_read = hs[inside]
+        if self.get_config('slick_field:evaporation_thickness') == 'oil':
+            # the field is emulsion volume per area: the oil layer is the oil share of that volume (area stays V_emulsion / h)
+            h_read = h_read * (el.mass_oil[sel] / el.oil_density[sel]) / vol[inside]
+        el.spillet_thickness[sel] = h_read
+        el.spillet_area[sel] = (el.mass_oil[sel] / el.oil_density[sel]) / h_read
         # record the surface set for the next call
         st['prev_surf'][:] = False; st['prev_surf'][ids] = True
         st['prev_vol'][ids] = vol
