@@ -1079,10 +1079,11 @@ class OpenCiceseOil(OpenOil):
             array[surface] = mass_remain[:, i]
             setattr(self.elements, 'comp_'+cm, self.elements.variables['comp_'+cm]['dtype'](array))
 
-        # update component evaporated masses with new values
+        # update component evaporated masses with the cumulative evaporated mass of each component
+        mass_evaporated_total = self.cicese_mass_balance['mass_evaporated'][surfaceID, :]
         for i, ce in enumerate(self.fluid_properties.composition[9:]):
             array = getattr(self.elements, 'comp_' + ce + '_evaporated')
-            array[surface] = mass_remain[:, i]
+            array[surface] = mass_evaporated_total[:, i]
             setattr(self.elements, 'comp_' + ce + '_evaporated',
                     self.elements.variables['comp_' + ce + '_evaporated']['dtype'](array))
 
