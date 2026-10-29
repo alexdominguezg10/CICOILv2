@@ -309,9 +309,9 @@ class OpenCiceseOil(OpenOil):
     CICESE_DEFAULTS = {
         # Emulsification (Fingas & Fieldhouse 2004, NOAA Bullwinkle)
         'EMUL_STABILITY_NU_REF': 1000.0,   # cSt, reference viscosity
-        'EMUL_STABILITY_MIN':    0.3,       # min stability clip factor
-        'EMUL_STABILITY_MAX':    3.0,       # max stability clip factor
-        'EMUL_RATE_SCALE':       0.0142,    # overall water-uptake rate correction
+        'EMUL_STABILITY_MIN':    1.0,       # min stability clip factor (was 0.3; no data support, removed 2026-10-29)
+        'EMUL_STABILITY_MAX':    1.0,       # max stability clip factor (was 3.0)
+        'EMUL_RATE_SCALE':       1.0,       # overall water-uptake rate correction (was 0.0142)
 
         # Biodegradation (Prince et al. 2017, Bacosa et al. 2015)
         'BIODEG_T_REF':          20.0,      # C, reference temperature for Q10
@@ -1683,8 +1683,8 @@ class OpenCiceseOil(OpenOil):
     #: to recover the original (viscosity-independent) NOAA Bullwinkle
     #: behaviour.
     EMUL_STABILITY_NU_REF = 1000.0  # cSt
-    EMUL_STABILITY_MIN = 0.3
-    EMUL_STABILITY_MAX = 3.0
+    EMUL_STABILITY_MIN = 1.0  # was 0.3 (Abkatun-2026 tuning, no data support; removed 2026-10-29 as in env/src on 2026-10-25): stock NOAA/v1 emulsification
+    EMUL_STABILITY_MAX = 1.0  # was 3.0
 
     #: Overall multiplicative correction to the stock ADIOS2/NOAA Bullwinkle
     #: water-uptake rate constant k_emul = water_uptake_coefficient(...)
@@ -1737,7 +1737,7 @@ class OpenCiceseOil(OpenOil):
     #: unbounded multiplicative factor. Set EMUL_RATE_SCALE = 1.0 (with
     #: EMUL_STABILITY_MIN = EMUL_STABILITY_MAX = 1.0) to recover the stock
     #: NOAA Bullwinkle rate.
-    EMUL_RATE_SCALE = 0.0142
+    EMUL_RATE_SCALE = 1.0  # was 0.0142 (tuned to a tar-ball day-17.2 target that has no data support); removed 2026-10-29
 
     def emulsification_cicese(self):
         #############################################
