@@ -133,6 +133,18 @@ OpenDrift `OpenOil` documentation for the full 22-variable inherited set.
 | `wave_entrainment:entrainment_rate` | enum | Li et al. (2017) | |
 | `biodegradation:method` | enum | `'Adcroft'` | Forced to `'Adcroft'`; describes the Q10 law in `biodegradation_cicese()` (not the upstream bulk formula) |
 
+### 3.2 Drift defaults set by `OpenCiceseOil.__init__`
+
+| Key | Value | Notes |
+|---|---|---|
+| `drift:vertical_advection` | False | |
+| `drift:vertical_mixing` | True | **Required** for correct photooxidation surface-fraction (Manual §6.2) |
+| `drift:current_uncertainty` | 0.05 | |
+| `drift:wind_uncertainty` | 0.5 | |
+| `drift:profiles_depth` | 20 | OD 1.14.9 plural key; replaces obsolete `required_profiles_z_range` |
+
+---
+
 ### 3.3 Dispersion mode and slick-field keys
 
 `processes:dispersion_mode` (enum, default `legacy`). The Roy mass sink (`processes:dispersion`) and the Li et al. (2017) entrainment (`drift:vertical_mixing`) act on the same breaking-wave fraction, so `legacy` counts the same oil twice.
@@ -157,18 +169,6 @@ OpenDrift `OpenOil` documentation for the full 22-variable inherited set.
 The default grid box is the Gulf of Mexico: set the four edges for any other region.
 
 `slick_field.py` (NumPy, ported from PARCELS_GPU): `Grid`, `fay_D0()`, MUSCL/minmod advection with Heun stepping, porous-medium spreading, Barenblatt-lens deposit, Bonn-class diagnostics; helpers `emulsion_volume()` and `sample()`.
-
-### 3.2 Drift defaults set by `OpenCiceseOil.__init__`
-
-| Key | Value | Notes |
-|---|---|---|
-| `drift:vertical_advection` | False | |
-| `drift:vertical_mixing` | True | **Required** for correct photooxidation surface-fraction (Manual §6.2) |
-| `drift:current_uncertainty` | 0.05 | |
-| `drift:wind_uncertainty` | 0.5 | |
-| `drift:profiles_depth` | 20 | OD 1.14.9 plural key; replaces obsolete `required_profiles_z_range` |
-
----
 
 ## 4. `OpenCiceseOil` — method reference
 
@@ -205,7 +205,7 @@ current/wind/wave/ice/temperature/salinity fields plus
 | `oil_weathering_cicese` | `(self)` | Per-timestep weathering pipeline (CICOIL scheme adapted from NOAA PyGNOME). Calls, in order: `evaporation_cicese()`, `emulsification_cicese()`, `spreading_cicese()`, `dispersion_cicese()`, `handle_subsea_dissolution()`, `handle_gas_particles()`, then conditionally `biodegradation_cicese()` (if `processes:biodegradation`) and `photooxidation_cicese()` (if `processes:photooxidation`). |
 | `evaporation_cicese` | `(self, atm_pressure=101325.)` | Cox vapor-pressure evaporation per pseudo-component; uses `diffusion_coeff_in_air()` (temperature in K) and `transfer_coeff_air()`. With `processes:slick_thickness_model=field` the thickness comes from the slick field. Moves mass from `comp_*` → `comp_*_evaporated` (cumulative evaporated mass per component) and `mass_oil` → `mass_evaporated`. |
 | `spreading_cicese` | `(self, gravity=9.81, drag_coef=0.003, film_limit=0.000005)` | Gravity-viscous spreading (Nihoul, 1984); updates `spillet_area`/`spillet_thickness`. `film_limit` is the minimum film thickness (m). |
-| `emulsification_cicese` | `(self)` | Bullwinkle-type water-in-oil emulsification; updates `max_water`, `water_fraction`, `viscosity`, `IFT`. Requires `max_water>0` at seed time for oils lacking ADIOS emulsification data (e.g. MAYA). The effective water-uptake rate is: `k_emul_eff = k_emul * clip(nu_dry/EMUL_STABILITY_NU_REF, EMUL_STABILITY_MIN, EMUL_STABILITY_MAX) * EMUL_RATE_SCALE`, where `nu_dry` [cSt] is the dry-oil (evaporation-corrected) kinematic viscosity computed each step. Class-level constants: `EMUL_STABILITY_NU_REF=1000.0`, `EMUL_STABILITY_MIN=1.0`, `EMUL_STABILITY_MAX=1.0`, `EMUL_RATE_SCALE=1.0` (since 2026-10-29 the stock NOAA Bullwinkle rate; the earlier tuning 0.3 / 3.0 / 0.0142 to a 17.2-day tar-ball target had no data support and is removed, see Manual §8). See Manual §8. |
+| `emulsification_cicese` | `(self)` | Bullwinkle-type water-in-oil emulsification; updates `max_water`, `water_fraction`, `viscosity`, `IFT`. Requires `max_water>0` at seed time for oils lacking ADIOS emulsification data (e.g. MAYA). The effective water-uptake rate is: `k_emul_eff = k_emul * clip(nu_dry/EMUL_STABILITY_NU_REF, EMUL_STABILITY_MIN, EMUL_STABILITY_MAX) * EMUL_RATE_SCALE`, where `nu_dry` [cSt] is the dry-oil (evaporation-corrected) kinematic viscosity computed each step. Class-level constants: `EMUL_STABILITY_NU_REF=1000.0`, `EMUL_STABILITY_MIN=1.0`, `EMUL_STABILITY_MAX=1.0`, `EMUL_RATE_SCALE=1.0` (since 2026-10-29 the stock NOAA Bullwinkle rate; the earlier tuning 0.3 / 3.0 / 0.0142 to a 17.2-day tar-ball target had no data support and is removed). See Manual §8. |
 | `dispersion_cicese` | `(self)` | Roy natural-dispersion mass sink, acting on surface elements only (`z == 0`), gated by `_roy_sink_enabled()` (`processes:dispersion` and `processes:dispersion_mode != 'transport'`). Rate from the pure function `roy_dispersed_fraction()`: `C_Roy · c_disp · V_entrain · dt / (emulsion_density · thickness)`, capped at 1, with the PyGNOME form `sqrt(kinematic viscosity)`; thickness is the element's `oil_film_thickness`. Moves mass to `mass_dispersed`. |
 | `local_sea_water_density` | `(self)` | Sea-water density from the elements' own temperature (K → °C) and salinity; used in the emulsion density, the Li et al. (2017) entrainment rate and the droplet spectrum (the bare `sea_water_density()` call returns the OpenDrift default, 1026.95 kg/m³ at 10 °C, S 35). |
 | `surface_wave_mixing` | `(self)` | Override: skips the Li entrainment in `processes:dispersion_mode='budget'`, otherwise delegates to `OpenOil`. |

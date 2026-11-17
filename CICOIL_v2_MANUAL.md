@@ -215,7 +215,7 @@ print("CICOIL OK:", len(o.oiltypes), "oils,", len(o.fluid_properties.composition
 |---|---|---|
 | `processes:evaporation` | True | Cox Pv evaporation |
 | `processes:spreading` | True | Nihoul spreading |
-| `processes:emulsification` | True | Bullwinkle model (viscosity-stability fix active; see §8); needs `max_water>0` at seed time (see §9 caveat) |
+| `processes:emulsification` | True | Bullwinkle model (viscosity-stability scaling available through `EMUL_*`, neutral at the 1.0 default; see §8); needs `max_water>0` at seed time (see §9 caveat) |
 | `processes:dispersion` | False | Roy natural-dispersion mass sink (surface elements only; see `processes:dispersion_mode`, §8A) |
 | `processes:dispersion_mode` | `legacy` | NEW — `legacy` / `transport` / `budget`: which of the Roy sink and the Li entrainment act (§8A) |
 | `processes:slick_thickness_model` | `legacy` | NEW — `legacy` / `field`: gridded slick thickness read by the evaporation (§8B); `field` needs `processes:spreading` False |
@@ -563,7 +563,7 @@ dominant fate process for surface-released MAYA crude in the Bay of Campeche.
 
 `test_emul_constants.py` checks (source level, plus class level when OpenDrift is importable) that the six constants are 1.0 / 1000.0 and that the rate formula is unchanged.
 
-`test_emulsification_viscosity.py` (4/4 PASS; written for the old defaults, it sets the constants explicitly):
+`test_emulsification_viscosity.py` (4/4 PASS with the old defaults 0.3 / 3.0 / 0.0142). **Not updated for the 2026-10-29 revert:** checks 1, 3 and 4 compare against the old default scaling, so they are expected to fail with the 1.0 defaults until the test sets the old values explicitly:
 - cold oil (5°C, high viscosity → stability > 1.0) emulsifies faster than
   warm oil (30°C, lower viscosity → stability < 1.0)
 - with `EMUL_STABILITY_MIN=MAX=1.0`, cold==warm (viscosity-independence
@@ -597,8 +597,7 @@ Changes to the Roy sink itself (2026-10):
   0.80 to 9e-4. The fraction is
   `C_Roy · c_disp · V_entrain · dt / (emulsion_density · thickness)`, capped at 1
   (function `roy_dispersed_fraction()`); thickness is the element's
-  `oil_film_thickness`. Viscous oil disperses far less (ratio of 9000 to 400 cSt:
-  4e-3).
+  `oil_film_thickness`. Viscous oil disperses far less.
 - **Not reproducible.** Runs with `processes:dispersion` True do not reproduce
   output from before this change (smoke run, 23 elements: dispersed mass
   112,971 → 10,434 kg).
@@ -661,7 +660,7 @@ within 0.7--1.3 % of Fay, translation, lens peak thickness), `test_slick_couplin
 | `test_biodegradation_water.py` | Dissolved-pool decay/deactivation (20 particles, `is_dissolved=1`, 60 d, SST 10/20/30°C) | 10°C: 68.526% biodeg, 0/20 deactivated; 20°C: 96.882%, 0/20; 30°C: 99.043%, 20/20 deactivated; mass conservation ~1e-15 |
 | `test_droplet_size_biodeg.py` | Droplet-size-resolved biodegradation (audit #2; 90 particles, 4 diameter groups, 10 d, SST=20°C) | `frac_biodeg(0.1mm)=7.110% > frac_biodeg(1mm)=0.810% > frac_biodeg(1cm)=0.082%`; `diameter=0` == `diameter=1mm` (rel. diff 4.7e-8); mass conservation rel. err 1.22e-16 |
 | `test_op_tracking.py` | Oxygenated photoproduct tracking (audit #4; 100 particles, 8 d, SST=29°C, synthetic UV) | mass conservation incl. OP pools rel. err 1.22e-16; `mass_op_dissolved + mass_op_degraded == mass_photooxidized` (OP_DISSOLVED_FRACTION=0.5, exact); `mass_op_degraded > 0` (K_OP_REMOVAL decay active) |
-| `test_emulsification_viscosity.py` | Viscosity-stability scaling: cold oil emulsifies faster than warm; unit-stability recovers viscosity independence; default stability suppresses rate vs unity; EMUL_RATE_SCALE=1.0 recovers stock NOAA rate | 4/4 PASS |
+| `test_emulsification_viscosity.py` | Viscosity-stability scaling: cold oil emulsifies faster than warm; unit-stability recovers viscosity independence; default stability suppresses rate vs unity; EMUL_RATE_SCALE=1.0 recovers stock NOAA rate | 4/4 PASS with the old defaults; needs updating (§8.5) |
 
 | `test_horizontal_diffusivity.py` | Random walk with constant forcing, 6 h, 2000 particles: D=0 gives no spread; D=10 m² s⁻¹ via `drift:horizontal_diffusivity` or via the environment fallback spreads as √(2Dt) (659 m vs 657 m); D=40 spreads 2.00× D=10 | 4/4 PASS |
 | `test_dispersion.py` | Roy rate form, thickness/density scaling, cap at 1, submerged elements untouched, six dispersion_mode × `processes:dispersion` combinations | 20 checks |
