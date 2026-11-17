@@ -20,6 +20,7 @@ cicoilv2_deployment/
 ├── ciceseoil.py              # CiceseOil (element type) + OpenCiceseOil (model class)
 ├── fluid_properties.py       # FluidProps: 17-component distillation framework
 ├── cicoil_estimations.py      # Standalone ADIOS-DB estimation functions
+├── slick_field.py             # gridded slick-thickness field (processes:slick_thickness_model=field), see §3.3
 ├── tamoc_plume.py             # Plume class — TAMOC BPM output → OpenDrift seeding
 ├── run_tamoc.py                # run_tamoc() — TAMOC BPM wrapper
 ├── tamoc_chemical_properties.py
@@ -59,7 +60,7 @@ cicoilv2_deployment/
 | `spillet_thickness` | m | 0.01 | |
 | `oil_density` | kg/m³ | 880 | |
 | `DOR` | — | 0 | Dispersant-to-Oil Ratio |
-| `IFT` | N/m | 30.0 | Oil–water interfacial tension |
+| `IFT` | N/m | 0.03 | Oil–water interfacial tension (N/m; was 30.0 in mN/m before 2026-10-26, which fed the Li et al. 2017 rate and the droplet spectrum a value 1000× too large) |
 | `max_water` | — | 0 | Maximum water content (emulsification cap) |
 | `mass_dissolved_surface` | kg | 0 | |
 | `mass_dissolved_subsea` | kg | 0 | Used as the dissolved-pool reference total (§7.3 of Manual) |
@@ -115,7 +116,9 @@ OpenDrift `OpenOil` documentation for the full 22-variable inherited set.
 | `seed:droplet_diameter_mu` | float | 0.001 m | Mean diameter for normal/lognormal |
 | `seed:droplet_diameter_sigma` | float | 0.0005 m | Std dev for normal/lognormal |
 | `seed:oil_type` | enum | first in `self.oiltypes` | ADIOS oil name |
-| `processes:dispersion` | bool | False | Natural dispersion (entrainment as small droplets) |
+| `processes:dispersion` | bool | False | Natural dispersion (Roy mass sink; see `processes:dispersion_mode`) |
+| `processes:dispersion_mode` | enum | `legacy` | `legacy` / `transport` / `budget`: which of the Roy mass sink and the Li et al. (2017) entrainment act. See §3.3 and Manual §8A |
+| `processes:slick_thickness_model` | enum | `legacy` | `legacy` / `field`: slick thickness read by the evaporation. `field` needs `processes:spreading` False and `processes:julia_weathering` False. See §3.3 and Manual §8B |
 | `processes:chemical_dispersion` | enum | No\_treatment | No\_treatment / Surface / SSDI |
 | `processes:evaporation` | bool | True | Cox Pv evaporation |
 | `processes:emulsification` | bool | True | Bullwinkle-based water uptake |
@@ -129,6 +132,31 @@ OpenDrift `OpenOil` documentation for the full 22-variable inherited set.
 | `wave_entrainment:` `droplet_size_distribution` | enum | Johansen et al. (2015) | Johansen et al. (2015) / Li et al. (2017) |
 | `wave_entrainment:entrainment_rate` | enum | Li et al. (2017) | |
 | `biodegradation:method` | enum | `'Adcroft'` | Forced to `'Adcroft'`; describes the Q10 law in `biodegradation_cicese()` (not the upstream bulk formula) |
+
+### 3.3 Dispersion mode and slick-field keys
+
+`processes:dispersion_mode` (enum, default `legacy`). The Roy mass sink (`processes:dispersion`) and the Li et al. (2017) entrainment (`drift:vertical_mixing`) act on the same breaking-wave fraction, so `legacy` counts the same oil twice.
+
+| Mode | Roy sink | Li entrainment |
+|---|---|---|
+| `legacy` | on if `processes:dispersion` True | on |
+| `transport` | off whatever `processes:dispersion` says | on (droplets transported, can resurface) |
+| `budget` | on if `processes:dispersion` True | off (PyGNOME/ADIOS style) |
+
+`slick_field:*` keys (read only when `processes:slick_thickness_model` = `field`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `slick_field:dx` | float | 500 m | Cell size of the thickness grid |
+| `slick_field:lon_min` / `lon_max` | float | -98 / -87 | West / east edge of the grid (°E); oil outside the box is not tracked by the field |
+| `slick_field:lat_min` / `lat_max` | float | 15 / 24.5 | South / north edge of the grid (°N) |
+| `slick_field:lens_age` | float | 300 s | Age of the Barenblatt lens in which a newly surfaced element's volume is deposited |
+| `slick_field:evaporation_thickness` | enum | `oil` | `oil`: evaporation reads h·V_oil/V_emulsion (oil volume per area, as the per-element spreading); `emulsion`: the cell thickness as it is (behaviour of commit 66bce53) |
+| `slick_field:drift_update_interval` | float | 3600 s | Interval at which the surface drift (current + windage) is resampled on the grid |
+
+The default grid box is the Gulf of Mexico: set the four edges for any other region.
+
+`slick_field.py` (NumPy, ported from PARCELS_GPU): `Grid`, `fay_D0()`, MUSCL/minmod advection with Heun stepping, porous-medium spreading, Barenblatt-lens deposit, Bonn-class diagnostics; helpers `emulsion_volume()` and `sample()`.
 
 ### 3.2 Drift defaults set by `OpenCiceseOil.__init__`
 
@@ -175,10 +203,13 @@ current/wind/wave/ice/temperature/salinity fields plus
 |---|---|---|
 | `oil_weathering` | `(self)` | Top-level dispatcher; calls `oil_weathering_cicese()` (or the upstream NOAA path) depending on `oil_weathering_model`. |
 | `oil_weathering_cicese` | `(self)` | Per-timestep weathering pipeline (CICOIL scheme adapted from NOAA PyGNOME). Calls, in order: `evaporation_cicese()`, `emulsification_cicese()`, `spreading_cicese()`, `dispersion_cicese()`, `handle_subsea_dissolution()`, `handle_gas_particles()`, then conditionally `biodegradation_cicese()` (if `processes:biodegradation`) and `photooxidation_cicese()` (if `processes:photooxidation`). |
-| `evaporation_cicese` | `(self, atm_pressure=101325.)` | Cox vapor-pressure evaporation per pseudo-component; uses `diffusion_coeff_in_air()` and `transfer_coeff_air()`. Moves mass from `comp_*` → `comp_*_evaporated` and `mass_oil` → `mass_evaporated`. |
+| `evaporation_cicese` | `(self, atm_pressure=101325.)` | Cox vapor-pressure evaporation per pseudo-component; uses `diffusion_coeff_in_air()` (temperature in K) and `transfer_coeff_air()`. With `processes:slick_thickness_model=field` the thickness comes from the slick field. Moves mass from `comp_*` → `comp_*_evaporated` (cumulative evaporated mass per component) and `mass_oil` → `mass_evaporated`. |
 | `spreading_cicese` | `(self, gravity=9.81, drag_coef=0.003, film_limit=0.000005)` | Gravity-viscous spreading (Nihoul, 1984); updates `spillet_area`/`spillet_thickness`. `film_limit` is the minimum film thickness (m). |
-| `emulsification_cicese` | `(self)` | Bullwinkle-type water-in-oil emulsification; updates `max_water`, `water_fraction`, `viscosity`, `IFT`. Requires `max_water>0` at seed time for oils lacking ADIOS emulsification data (e.g. MAYA). The effective water-uptake rate is: `k_emul_eff = k_emul * clip(nu_dry/EMUL_STABILITY_NU_REF, EMUL_STABILITY_MIN, EMUL_STABILITY_MAX) * EMUL_RATE_SCALE`, where `nu_dry` [cSt] is the dry-oil (evaporation-corrected) kinematic viscosity computed each step. Class-level constants: `EMUL_STABILITY_NU_REF=1000.0`, `EMUL_STABILITY_MIN=0.3`, `EMUL_STABILITY_MAX=3.0`, `EMUL_RATE_SCALE=0.0142` (calibrated to a 17.2-day tar-ball transition for MAYA crude at 10 m/s wind; achieved 16.92 d). Set all three to 1.0 to recover the stock NOAA Bullwinkle rate. See Manual §8. |
-| `dispersion_cicese` | `(self)` | Natural dispersion via wave breaking; calls `oil_wave_entrainment_rate()` and one of the droplet-size-distribution methods (§4.4) to move mass to `mass_dispersed` / subsea droplets. |
+| `emulsification_cicese` | `(self)` | Bullwinkle-type water-in-oil emulsification; updates `max_water`, `water_fraction`, `viscosity`, `IFT`. Requires `max_water>0` at seed time for oils lacking ADIOS emulsification data (e.g. MAYA). The effective water-uptake rate is: `k_emul_eff = k_emul * clip(nu_dry/EMUL_STABILITY_NU_REF, EMUL_STABILITY_MIN, EMUL_STABILITY_MAX) * EMUL_RATE_SCALE`, where `nu_dry` [cSt] is the dry-oil (evaporation-corrected) kinematic viscosity computed each step. Class-level constants: `EMUL_STABILITY_NU_REF=1000.0`, `EMUL_STABILITY_MIN=1.0`, `EMUL_STABILITY_MAX=1.0`, `EMUL_RATE_SCALE=1.0` (since 2026-10-29 the stock NOAA Bullwinkle rate; the earlier tuning 0.3 / 3.0 / 0.0142 to a 17.2-day tar-ball target had no data support and is removed, see Manual §8). See Manual §8. |
+| `dispersion_cicese` | `(self)` | Roy natural-dispersion mass sink, acting on surface elements only (`z == 0`), gated by `_roy_sink_enabled()` (`processes:dispersion` and `processes:dispersion_mode != 'transport'`). Rate from the pure function `roy_dispersed_fraction()`: `C_Roy · c_disp · V_entrain · dt / (emulsion_density · thickness)`, capped at 1, with the PyGNOME form `sqrt(kinematic viscosity)`; thickness is the element's `oil_film_thickness`. Moves mass to `mass_dispersed`. |
+| `local_sea_water_density` | `(self)` | Sea-water density from the elements' own temperature (K → °C) and salinity; used in the emulsion density, the Li et al. (2017) entrainment rate and the droplet spectrum (the bare `sea_water_density()` call returns the OpenDrift default, 1026.95 kg/m³ at 10 °C, S 35). |
+| `surface_wave_mixing` | `(self)` | Override: skips the Li entrainment in `processes:dispersion_mode='budget'`, otherwise delegates to `OpenOil`. |
+| `_slick_field_step` | `(self)` | One step of the gridded slick thickness (`processes:slick_thickness_model=field`): rescale by B/A, advect with the surface drift, spread (Fay regime II), add newly surfaced volume as Barenblatt lenses; each surface element reads the thickness of its cell. |
 | `handle_subsea_dissolution` | `(self)` | Dissolved-phase mass bookkeeping for `is_dissolved==1` particles. On first encounter, transfers `cicese_mass_balance['mass_components']` → `mass_dissolved` (one-time, zeroing components) and sets `mass_dissolved_subsea` as the reference total. See Manual §7.3 for the full lifecycle (this is the entry point that `biodegradation_cicese()`'s dissolved branch consumes). |
 | `handle_gas_particles` | `(self)` | For `is_bubble==1` particles: records `mass_gas`, then deactivates the particle (status `released_gas`) — gas bubble mass is tracked but not advected further. |
 | `biodegradation_cicese` | `(self)` | **NEW.** Per-component, Q10-scaled (T_REF=20°C, `BIODEG_Q10=3`) first-order decay using `K_BIODEG_ALI`/`K_BIODEG_AROM`/`K_BIODEG_RESIDUE`, with `BIODEG_SURFACE_FACTOR=1/30` for `z==0` particles and a droplet-size scaling factor `(BIODEG_DROPLET_D_REF/d)^BIODEG_DROPLET_EXPONENT` (audit #2; `d=elements.diameter` clamped to `[BIODEG_DROPLET_DIAMETER_MIN, BIODEG_DROPLET_DIAMETER_MAX]`, `diameter==0`→factor=1), plus a dissolved-phase branch (`K_BIODEG_WATER=0.0578 d⁻¹`) for `is_dissolved==1` particles, deactivating once `mass_dissolved < BIODEG_WATER_DEPLETION_FRAC` (0.01) of its initial reference. Writes `mass_biodegraded_from_oil/_water`, `mass_biodegraded`, `fraction_biodegraded_from_oil/_water`. Full physics in Manual §7. |
