@@ -711,9 +711,9 @@ del frente a 0.7–1.3 % de Fay, traslación, espesor pico de la lente),
 | `test_ift_units.py` | IFT en N/m (por defecto 0.03) | véase el archivo |
 | `test_emul_constants.py` | Las constantes de emulsificación valen 1.0 | véase el archivo |
 | `test_croco_native_reader.py` | `reader_croco_native` en un archivo CROCO sintético: `mask_u`/`mask_v` derivadas, `u`/`v` desescalonadas en un nodo rho iguales al valor analítico, `destagger=False` muestra el desfase de media celda original | 7/7 PASS |
-| `test_deactivate_masks.py` | Las burbujas de gas liberadas y los elementos disueltos agotados se desactivan con una máscara booleana (OpenDrift 1.14.9 la exige); ambas corridas terminan | requiere la rama `fix/gas-bubble-mask` |
-| `test_oil_density_ids.py` | Siembra escalonada de pluma (gas, crudo, disuelto): ningún elemento de crudo queda activo con masa NaN (17 antes de la corrección, 0 después) | requiere la rama `fix/gas-bubble-mask` |
-| `test_vertical_profile.py` | `vertical_profile.sample_profile` con lectores sintéticos (columnas crudas, NaN bajo el fondo se conserva, se agrega el nivel superficial); la prueba del escritor TAMOC se omite si TAMOC no está instalado | requiere la rama `feat/vertical-profile` |
+| `test_deactivate_masks.py` | Las burbujas de gas liberadas y los elementos disueltos agotados se desactivan con una máscara booleana (OpenDrift 1.14.9 la exige); ambas corridas terminan | v2.1.0 |
+| `test_oil_density_ids.py` | Siembra escalonada de pluma (gas, crudo, disuelto): ningún elemento de crudo queda activo con masa NaN (17 antes de la corrección, 0 después) | v2.1.0 |
+| `test_vertical_profile.py` | `vertical_profile.sample_profile` con lectores sintéticos (columnas crudas, NaN bajo el fondo se conserva, se agrega el nivel superficial); la prueba del escritor TAMOC se omite si TAMOC no está instalado | v2.1.0 |
 
 ### Advertencias conocidas
 - **Emulsificación**: se requiere `max_water=0.9` en `seed_elements()` para MAYA
@@ -746,7 +746,7 @@ del frente a 0.7–1.3 % de Fay, traslación, espesor pico de la lente),
 - `cicoil_estimations.py` (13 KB) — soluciones independientes de estimación de la base ADIOS
 
 **Acoplamiento con TAMOC:**
-- `tamoc_plume.py`, `run_tamoc.py`, `tamoc_chemical_properties.py`, `vertical_profile.py` (rama `feat/vertical-profile`, §10C)
+- `tamoc_plume.py`, `run_tamoc.py`, `tamoc_chemical_properties.py`, `vertical_profile.py` (§10C)
 
 **Lectores NEMO/CROCO** (`readers/`):
 - `reader_NEMO_native_v3.py`, `reader_nemo_combined.py`, `reader_nemo_modified.py`, `reader_nemo_optimized.py`
@@ -878,7 +878,7 @@ copie a su espacio lo que necesite):
 
 ---
 
-## 10C. Cambios posteriores a b032140 (ramas aún sin fusionar)
+## 10C. Cambios posteriores a b032140 (incluidos en v2.1.0)
 
 | Rama | Cambio | Efecto en los resultados |
 |---|---|---|
@@ -931,5 +931,5 @@ la columna por debajo de la profundidad de liberación.
 
 ---
 
-**Versión:** CICOILv2 (commit `b032140` más las ramas de la §10C; etiqueta de versión `v2.1.0` pendiente)
+**Versión:** CICOILv2 (versión `v2.1.0`: `b032140` más los cambios de la §10C)
 **Última actualización:** 2026-11-17

@@ -671,9 +671,9 @@ within 0.7--1.3 % of Fay, translation, lens peak thickness), `test_slick_couplin
 | `test_ift_units.py` | IFT in N/m (default 0.03) | see file |
 | `test_emul_constants.py` | Emulsification constants are 1.0 | see file |
 | `test_croco_native_reader.py` | `reader_croco_native` on a synthetic CROCO file: derived `mask_u`/`mask_v`, de-staggered `u`/`v` at a rho node equal the analytic value, `destagger=False` shows the stock half-cell offset | 7/7 PASS |
-| `test_deactivate_masks.py` | Released gas bubbles and depleted dissolved elements are deactivated with a boolean mask (OpenDrift 1.14.9 needs one); both runs complete | needs branch `fix/gas-bubble-mask` |
-| `test_oil_density_ids.py` | Staggered plume seeding (gas, oil, dissolved): no oil element stays active with NaN mass (17 before the fix, 0 after) | needs branch `fix/gas-bubble-mask` |
-| `test_vertical_profile.py` | `vertical_profile.sample_profile` on synthetic readers (raw columns, NaN below the seafloor kept, surface level added); TAMOC writer test is skipped when TAMOC is not installed | needs branch `feat/vertical-profile` |
+| `test_deactivate_masks.py` | Released gas bubbles and depleted dissolved elements are deactivated with a boolean mask (OpenDrift 1.14.9 needs one); both runs complete | v2.1.0 |
+| `test_oil_density_ids.py` | Staggered plume seeding (gas, oil, dissolved): no oil element stays active with NaN mass (17 before the fix, 0 after) | v2.1.0 |
+| `test_vertical_profile.py` | `vertical_profile.sample_profile` on synthetic readers (raw columns, NaN below the seafloor kept, surface level added); TAMOC writer test is skipped when TAMOC is not installed | v2.1.0 |
 
 ### Known caveats
 - **Emulsification**: `max_water=0.9` required at `seed_elements()` for MAYA
@@ -704,7 +704,7 @@ within 0.7--1.3 % of Fay, translation, lens peak thickness), `test_slick_couplin
 - `cicoil_estimations.py` (13 KB) — standalone ADIOS-DB estimation workarounds
 
 **TAMOC coupling:**
-- `tamoc_plume.py`, `run_tamoc.py`, `tamoc_chemical_properties.py`, `vertical_profile.py` (branch `feat/vertical-profile`, §10C)
+- `tamoc_plume.py`, `run_tamoc.py`, `tamoc_chemical_properties.py`, `vertical_profile.py` (§10C)
 
 **NEMO/CROCO readers** (`readers/`):
 - `reader_NEMO_native_v3.py`, `reader_nemo_combined.py`, `reader_nemo_modified.py`, `reader_nemo_optimized.py`
@@ -833,7 +833,7 @@ you need into your own space):
 
 ---
 
-## 10C. Changes after b032140 (branches not yet merged)
+## 10C. Changes after b032140 (included in v2.1.0)
 
 | Branch | Change | Effect on results |
 |---|---|---|
@@ -886,5 +886,5 @@ the release depth.
 
 ---
 
-**Version:** CICOILv2 (commit `b032140` plus the branches of §10C; release tag `v2.1.0` pending)
+**Version:** CICOILv2 (release `v2.1.0`: `b032140` plus the changes of §10C)
 **Last updated:** 2026-11-17

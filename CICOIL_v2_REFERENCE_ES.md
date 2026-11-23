@@ -240,7 +240,7 @@ corriente/viento/oleaje/hielo/temperatura/salinidad del océano más
 
 | Método | Firma | Descripción |
 |---|---|---|
-| `oil_density` | `(self, indices)` | Densidad del crudo por partícula en las posiciones `indices` del arreglo, a partir de la composición actual. Las filas de `cicese_mass_balance` se buscan por ID de elemento (`self.elements.ID[indices]`; la indexación posicional era un error corregido en la rama `fix/gas-bubble-mask`, manual §10C). |
+| `oil_density` | `(self, indices)` | Densidad del crudo por partícula en las posiciones `indices` del arreglo, a partir de la composición actual. Las filas de `cicese_mass_balance` se buscan por ID de elemento (`self.elements.ID[indices]`; la indexación posicional era un error corregido en v2.1.0, manual §10C). |
 | `component_molfrac` | `(self, surface)` | Fracciones molares de los 17 pseudo-componentes para los elementos `surface` (máscara booleana); las usa la evaporación. |
 | `diffusion_coeff_in_air` | `(self, atm_pressure=101325.)` | Coeficientes de difusión de vapor en aire (Hilal & Karickhoff 2003; Kim & Monroe 2014), por pseudo-componente, función de `atm_pressure`. |
 | `transfer_coeff_air` | `(self, surface_indices)` | Coeficientes de transferencia de masa en la interfaz aire-mar para los elementos `surface_indices` (dependen de la rapidez del viento); los usa `evaporation_cicese()`. |
@@ -380,7 +380,7 @@ Envoltura que corre una simulación BPM de TAMOC dados:
 - `bins` — número de bins de tamaño de partícula de la fase dispersa
 - `output_name` — nombre base de los archivos de salida de TAMOC, que luego leen `Plume.load_plume()` / `Plume.get_particle_properties()`
 
-### 7.2b `vertical_profile` (rama `feat/vertical-profile`)
+### 7.2b `vertical_profile` (v2.1.0)
 ```python
 sample_profile(readers, lon, lat, time, z_max=None, add_surface=True)
 create_profile(nc_file, readers, lon, lat, time, source='OpenDrift readers',
@@ -547,5 +547,5 @@ salida NetCDF o una instancia de `OpenCiceseOil`; sin estado compartido).
 
 ---
 
-**Versión:** CICOILv2 (commit `b032140`; etiqueta de versión `v2.1.0` pendiente)
+**Versión:** CICOILv2 (versión `v2.1.0`: `b032140` más los cambios de la §10C del manual)
 **Última actualización:** 2026-11-17

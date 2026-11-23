@@ -234,7 +234,7 @@ current/wind/wave/ice/temperature/salinity fields plus
 
 | Method | Signature | Description |
 |---|---|---|
-| `oil_density` | `(self, indices)` | Per-particle oil density at given array positions `indices`, from the current composition. Rows of `cicese_mass_balance` are looked up by element ID (`self.elements.ID[indices]`; positional indexing was a bug fixed on branch `fix/gas-bubble-mask`, manual §10C). |
+| `oil_density` | `(self, indices)` | Per-particle oil density at given array positions `indices`, from the current composition. Rows of `cicese_mass_balance` are looked up by element ID (`self.elements.ID[indices]`; positional indexing was a bug fixed in v2.1.0, manual §10C). |
 | `component_molfrac` | `(self, surface)` | Mole fractions of the 17 pseudo-components for `surface` (boolean mask) elements — used by evaporation. |
 | `diffusion_coeff_in_air` | `(self, atm_pressure=101325.)` | Vapour diffusion coefficients in air (Hilal & Karickhoff 2003; Kim & Monroe 2014), per pseudo-component, function of `atm_pressure`. |
 | `transfer_coeff_air` | `(self, surface_indices)` | Mass-transfer coefficients at the air-sea interface for `surface_indices` elements (wind-speed dependent), used by `evaporation_cicese()`. |
@@ -372,7 +372,7 @@ Wrapper that runs a TAMOC BPM simulation given:
 - `bins` — number of particle-size bins for the dispersed phase
 - `output_name` — base filename for TAMOC output files, later read by `Plume.load_plume()` / `Plume.get_particle_properties()`
 
-### 7.2b `vertical_profile` (branch `feat/vertical-profile`)
+### 7.2b `vertical_profile` (v2.1.0)
 ```python
 sample_profile(readers, lon, lat, time, z_max=None, add_surface=True)
 create_profile(nc_file, readers, lon, lat, time, source='OpenDrift readers',
@@ -534,5 +534,5 @@ ensembles where per-particle output would be too large.
 
 ---
 
-**Version:** CICOILv2 (commit `b032140`; release tag `v2.1.0` pending)
+**Version:** CICOILv2 (release `v2.1.0`: `b032140` plus the changes of §10C of the manual)
 **Last updated:** 2026-11-17 (Spanish translation: `CICOIL_v2_REFERENCE_ES.md`)
