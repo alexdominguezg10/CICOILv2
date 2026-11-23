@@ -4,8 +4,9 @@
 
 This manual merges and supersedes `cicoilv2/hpc_migration.md` (deployment
 workflow) and `DEPLOYMENT_MANIFEST.txt` (file inventory / API reference), and
-adds the photooxidation, biodegradation, and emulsification-fix modules
-developed through 2026-06-15.
+adds the photooxidation, biodegradation, and emulsification modules
+developed through 2026-06-15 and the weathering changes of October 2026
+(§8A, §8B, §10A). A Spanish translation is in `CICOIL_v2_MANUAL_ES.md`.
 
 **Active development copy:** `OILSPILL/CICOIL_dev/cicoilv2_deployment/`
 **Contact:** adomingu@cicese.edu.mx — CICESE, Departamento de Oceanografía Física
@@ -28,15 +29,15 @@ OpenDrift 1.14.9, plus three CICESE-developed improvements:
 - **Biodegradation** (`biodegradation_cicese()`) — component-resolved,
   temperature-scaled, with surface-slick suppression and a dissolved-phase
   pathway.
-- **Emulsification viscosity-stability fix** (`emulsification_cicese()`) —
-  viscosity-dependent scaling + empirical rate correction that prevents the
-  stock NOAA Bullwinkle model from producing instant (~5 h) mousse formation
-  and instead gives a physically calibrated ~17-day tar-ball transition for
-  MAYA crude.
+- **Emulsification** (`emulsification_cicese()`) — Bullwinkle water uptake
+  with optional viscosity-stability scaling (`EMUL_*` constants). The
+  tar-ball calibration of June 2026 was removed on 2026-10-29: the constants
+  are 1.0 (stock NOAA rate); see §8.
 
 Photooxidation and biodegradation are additive (off by default) and conserve
-mass exactly (rel. err ~1e-15–1e-16 in all test suites). The emulsification
-fix is always active when `processes:emulsification = True`.
+mass exactly (rel. err ~1e-15–1e-16 in all test suites). Emulsification is
+active when `processes:emulsification = True`. Changes since v2.0.0 are in
+§10A; users coming from CICOIL v1 should read §10B.
 
 ### What CICOIL adds over upstream OpenDrift 1.14.9 `OpenOil`
 - 17-component weathering (Cox vapor-pressure evaporation, Nihoul spreading,
@@ -670,6 +671,9 @@ within 0.7--1.3 % of Fay, translation, lens peak thickness), `test_slick_couplin
 | `test_ift_units.py` | IFT in N/m (default 0.03) | see file |
 | `test_emul_constants.py` | Emulsification constants are 1.0 | see file |
 | `test_croco_native_reader.py` | `reader_croco_native` on a synthetic CROCO file: derived `mask_u`/`mask_v`, de-staggered `u`/`v` at a rho node equal the analytic value, `destagger=False` shows the stock half-cell offset | 7/7 PASS |
+| `test_deactivate_masks.py` | Released gas bubbles and depleted dissolved elements are deactivated with a boolean mask (OpenDrift 1.14.9 needs one); both runs complete | needs branch `fix/gas-bubble-mask` |
+| `test_oil_density_ids.py` | Staggered plume seeding (gas, oil, dissolved): no oil element stays active with NaN mass (17 before the fix, 0 after) | needs branch `fix/gas-bubble-mask` |
+| `test_vertical_profile.py` | `vertical_profile.sample_profile` on synthetic readers (raw columns, NaN below the seafloor kept, surface level added); TAMOC writer test is skipped when TAMOC is not installed | needs branch `feat/vertical-profile` |
 
 ### Known caveats
 - **Emulsification**: `max_water=0.9` required at `seed_elements()` for MAYA
@@ -682,8 +686,12 @@ within 0.7--1.3 % of Fay, translation, lens peak thickness), `test_slick_couplin
   attribution.
 - **Longitude sign**: Bay of Campeche is °W — use `lon=-92.x`, not `+92.x`
   (positive longitude silently places particles in the Indian Ocean).
-- **Mass scaling**: CICOIL enforces 185.6 kg/element; `m3_per_element` is
-  rejected. Scale outputs by `M_spill / (N_p × 185.6 kg)`.
+- **Mass per element**: CICOIL does not enforce a fixed mass per element; it
+  is the seeded oil mass divided by the number of elements. The value
+  185.6 kg inherited from v1 is not applied by the model (the Nohoch 2023
+  TAMOC script used it only to scale plots, against a real 0.31 kg per
+  element). Scale outputs by `M_spill / (N_p × mass per element)` using the
+  mass actually seeded (sum of `mass_oil` at the first output step).
 
 ---
 
@@ -696,7 +704,7 @@ within 0.7--1.3 % of Fay, translation, lens peak thickness), `test_slick_couplin
 - `cicoil_estimations.py` (13 KB) — standalone ADIOS-DB estimation workarounds
 
 **TAMOC coupling:**
-- `tamoc_plume.py`, `run_tamoc.py`, `tamoc_chemical_properties.py`
+- `tamoc_plume.py`, `run_tamoc.py`, `tamoc_chemical_properties.py`, `vertical_profile.py` (branch `feat/vertical-profile`, §10C)
 
 **NEMO/CROCO readers** (`readers/`):
 - `reader_NEMO_native_v3.py`, `reader_nemo_combined.py`, `reader_nemo_modified.py`, `reader_nemo_optimized.py`
@@ -745,6 +753,114 @@ Total: ~500 MB tarball, ~150 MB installed in site-packages.
 
 ---
 
+## 10B. Migrating from CICOIL v1
+
+For users of CICOIL v1 (`Cicoil_Version_22-06-2023`, an OpenDrift 1.9.0 fork,
+TAMOC 3.4.0). v1 is frozen and will not be corrected; all development is in
+CICOILv2 (OpenDrift 1.14.9, TAMOC 4.1.2).
+
+### What changes for the user
+
+| Topic | v1 | CICOILv2 |
+|---|---|---|
+| Base | OpenDrift 1.9.0 fork | OpenDrift 1.14.9, unmodified; CICOIL files are copied into `opendrift/models/openoil/` |
+| TAMOC | 3.4.0 | 4.1.2 |
+| Lost particles | stored as `inf` / 1e37 | stored as NaN: use `np.nanmean` / `np.nansum` or filter by `status` |
+| Random numbers | — | pass `seed=` to the model constructor; OpenDrift owns its generator |
+| Config keys | the v1 reader rejects unknown keys | OpenDrift 1.14.9 keys, e.g. `drift:profiles_depth` (plural); copy an old configuration into a new script and let OpenDrift flag invalid keys |
+| ERA5 reader | fails on the scalar coordinates `number` / `expver` | reads them (v1 needed a preprocessed ERA5) |
+| CROCO output | needs conversion to z-levels on a regular grid | `reader_croco_native` reads raw sigma-coordinate output |
+| Photooxidation, biodegradation | not available | optional, off by default (§6, §7) |
+
+### Why v1 and CICOILv2 results differ
+
+Three bugs found while running v1 against OpenOil, PyGNOME and CICOILv2 on
+Nohoch 2023 change the v1 results (report `V1_BUGS` in `CICOIL_COMPARISON`):
+
+1. **Kelvin/Celsius** in `diffusion_coeff_in_air`: evaporation too low
+   (v2: 25–30 % in warm water).
+2. **Droplet terminal velocity**: the temperature in K enters the sea-water
+   density and the diameter is used where a radius is needed, so entrained
+   droplets return to the surface almost at once and v1 shows almost no
+   submerged oil.
+3. **Roy dispersion constant** uses `sqrt(nu/rho)` instead of `sqrt(nu)`
+   (same expression in stock OpenDrift 1.14.9): E1 disperses 92 % with the
+   coded form against 3.3 % with the PyGNOME form.
+
+CICOILv2 fixes all three. A v1 run and a v2 run with the same configuration
+are therefore not expected to agree, and the difference is not noise.
+
+### Shared installation on Ixachi (CICESE)
+
+All under `/LUSTRE/adomingu/CICOIL_SHARED` (read-only for users; copy what
+you need into your own space):
+
+- `env/cicoilv2`: conda environment with OpenDrift 1.14.9, CICOILv2 (commit
+  `b032140`) and TAMOC 4.1.2 (private patched copy in `src/tamoc_4.1.2`;
+  numpy 2.x needs `f2py --backend meson`). The package metadata of TAMOC says
+  4.0.0; `tamoc.__version__` says 4.1.2.
+- `examples/abkatun2026/inputs` (small GLORYS + ERA5 set) and
+  `examples/nohoch2023`: preprocessed forcing.
+- `ejemplo/abkatun2026.py` with `run_abkatun2026.slurm` (`MODE=2d|3d`,
+  `FORCING=coupled|glorys`, `DROPLETS=tamoc|default|lognormal:D50:SIGMA`);
+  `ejemplo/run_nohoch2023.slurm`.
+- `readers_check/` and `hpc/10_check_readers.slurm`: reader checks for CROCO
+  (native), WW3 and WRF (through CF files made by `prep_forcing.py`; OpenDrift
+  has no native WW3/WRF reader) and NEMO (skipped until a NEMO file is given).
+- No compute on the login node: everything through `sbatch` (partition
+  `oc_cpus`; `oc_gpu` for GPU).
+- Own environment: `deploy_on_hpc_conda.sh` (§2.2).
+
+### Pitfalls
+
+- **Longitude**: the Gulf is west, `lon=-92.x`; `+92` places particles in the
+  Indian Ocean without a warning.
+- **`max_water`**: without `max_water=0.9` in `seed_elements()` MAYA does not
+  emulsify.
+- **Reproducibility**: runs made with `processes:dispersion` True before
+  October 2026 are not reproduced (§8A).
+- Store the seed and the commit with each result.
+
+### Validation status
+
+- S0 (Nohoch 2023, day 30, `EMUL_*` = 1.0): `budget` mode 2.1 % dispersed /
+  26.9 % evaporated / 71.0 % left; `legacy` 1.7 / 23.8 / 74.6; PyGNOME
+  4.4 / 24.4 / 70.6. `budget` is 2.3 points below PyGNOME in dispersion; the
+  cause traced is the timing of emulsification onset (CICOIL hard-codes 2 h;
+  PyGNOME uses the oil record's Bullwinkle fraction), not slick thickness.
+- Open: SAR-based criterion; default `dispersion_mode` for E1; PyGNOME
+  element-mass scale; subsurface fields of `reader_croco_native`.
+
+---
+
+## 10C. Changes after b032140 (branches not yet merged)
+
+| Branch | Change | Effect on results |
+|---|---|---|
+| `fix/gas-bubble-mask` | `handle_gas_particles` and `handle_subsea_dissolution` pass a boolean mask to `deactivate_elements` (OpenDrift 1.14.9 raises a broadcast error with integer indices) | Runs with gas bubbles (`is_bubble=1`) or depleted dissolved elements stopped at the first step before; none otherwise |
+| `fix/gas-bubble-mask` | `oil_density` indexes `cicese_mass_balance` by element ID, as `component_molfrac` does (it used array positions; v1 used `indices - 1`) | Identical while all elements are seeded together and none is removed. With staggered seeding (TAMOC plumes) or removed elements, oil elements read another element's mass row, kept status 0 with NaN density and mass and left the budget (Abkatun 2026 3D: 119 of 427 elements, closure 67 %). Runs where elements were removed mid-run (stranding, leaving the domain) have not been audited |
+| `feat/vertical-profile` | New `vertical_profile.py`: `create_profile()` builds the TAMOC ambient profile (T, S, u, v at depth) from OpenDrift readers; `sample_profile()` returns the columns | Needed for the TAMOC route below; no effect on other runs |
+
+### TAMOC route (as in v1)
+
+1. `get_live_composition` for the oil and gas;
+2. `vertical_profile.create_profile(nc_file, readers, lon, lat, time, ...)`
+   writes the ambient profile; it reads the raw nearest-cell column with
+   `reader.get_variables`, not `get_variables_interpolated`, which fills NaN
+   (seafloor, land) from neighbours and returns stale vertical blocks when
+   called level by level;
+3. `run_tamoc` runs the bent-plume model;
+4. `Plume(tracked=False)`: TAMOC 4.1.2 does not write per-particle track
+   files, so `tracked=True` fails;
+5. `seed_plume_elements(seed_time=[start, end])`.
+
+The forcing must have vertical levels: the Abkatun 2026 GLORYS/ANFC files
+have one level (0.49 m); the 3D example uses the coupled CROCO-WRF-WW3 files
+(10 levels). `create_profile(..., z_max=depth+20)` extends the column below
+the release depth.
+
+---
+
 ## 11. References
 
 - Adcroft et al. (2010) — Q10=3, T_REF=20°C temperature-scaling law for
@@ -770,5 +886,5 @@ Total: ~500 MB tarball, ~150 MB installed in site-packages.
 
 ---
 
-**Version:** CICOILv2.0
-**Last updated:** 2026-06-14
+**Version:** CICOILv2 (commit `b032140` plus the branches of §10C; release tag `v2.1.0` pending)
+**Last updated:** 2026-11-17

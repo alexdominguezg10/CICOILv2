@@ -234,7 +234,7 @@ current/wind/wave/ice/temperature/salinity fields plus
 
 | Method | Signature | Description |
 |---|---|---|
-| `oil_density` | `(self, indices)` | Per-particle oil density at given element indices, accounting for current composition/temperature. |
+| `oil_density` | `(self, indices)` | Per-particle oil density at given array positions `indices`, from the current composition. Rows of `cicese_mass_balance` are looked up by element ID (`self.elements.ID[indices]`; positional indexing was a bug fixed on branch `fix/gas-bubble-mask`, manual §10C). |
 | `component_molfrac` | `(self, surface)` | Mole fractions of the 17 pseudo-components for `surface` (boolean mask) elements — used by evaporation. |
 | `diffusion_coeff_in_air` | `(self, atm_pressure=101325.)` | Vapour diffusion coefficients in air (Hilal & Karickhoff 2003; Kim & Monroe 2014), per pseudo-component, function of `atm_pressure`. |
 | `transfer_coeff_air` | `(self, surface_indices)` | Mass-transfer coefficients at the air-sea interface for `surface_indices` elements (wind-speed dependent), used by `evaporation_cicese()`. |
@@ -371,6 +371,14 @@ Wrapper that runs a TAMOC BPM simulation given:
 - `total_flow`, `z0`, `D`, `Tj`, `phi_0`, `theta_0` — release rate, depth, orifice diameter, jet temperature, and discharge angles
 - `bins` — number of particle-size bins for the dispersed phase
 - `output_name` — base filename for TAMOC output files, later read by `Plume.load_plume()` / `Plume.get_particle_properties()`
+
+### 7.2b `vertical_profile` (branch `feat/vertical-profile`)
+```python
+sample_profile(readers, lon, lat, time, z_max=None, add_surface=True)
+create_profile(nc_file, readers, lon, lat, time, source='OpenDrift readers',
+               summary='Ambient profile from OpenDrift readers', sea_name=..., z_max=None, add_surface=True)
+```
+`sample_profile` reads T, S, u, v at every depth level of the readers (raw nearest-cell column via `reader.get_variables`; NaN below the seafloor is kept) and returns the columns. `create_profile` writes the TAMOC ambient-profile netCDF (T, S, pressure, ua, va against depth) and returns its path; pass it as `profile` to `run_tamoc`. The readers need vertical levels (coupled CROCO files; the Abkatun 2026 GLORYS/ANFC files have one). Use `Plume(tracked=False)` with TAMOC 4.1.2.
 
 ### 7.3 `tamoc_chemical_properties.py`
 Static property tables (molecular weights, critical properties, Henry's law
@@ -526,5 +534,5 @@ ensembles where per-particle output would be too large.
 
 ---
 
-**Version:** CICOILv2.0
-**Last updated:** 2026-06-14
+**Version:** CICOILv2 (commit `b032140`; release tag `v2.1.0` pending)
+**Last updated:** 2026-11-17 (Spanish translation: `CICOIL_v2_REFERENCE_ES.md`)

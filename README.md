@@ -170,6 +170,8 @@ The test suite covers:
 
 - **[CICOIL_v2_MANUAL.md](CICOIL_v2_MANUAL.md)** — Full manual: installation, deployment, weathering physics, parameter calibration
 - **[CICOIL_v2_REFERENCE.md](CICOIL_v2_REFERENCE.md)** — API reference: element variables, configuration keys, method signatures
+- **Coming from CICOIL v1?** Read §10B of the manual (what changes, why results differ, shared install on Ixachi). §10C lists changes after `b032140` (gas-bubble mask, `oil_density` ID fix, `vertical_profile.py`).
+- **Español:** [README_ES.md](README_ES.md), [CICOIL_v2_MANUAL_ES.md](CICOIL_v2_MANUAL_ES.md), [CICOIL_v2_REFERENCE_ES.md](CICOIL_v2_REFERENCE_ES.md)
 
 ## Authors
 
