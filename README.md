@@ -9,7 +9,9 @@ CICOILv2 extends [OpenDrift](https://github.com/OpenDrift/opendrift) (v1.14.9) w
 - **17-component mass balance** — 8 aliphatic + 8 aromatic pseudo-groups + residue, resolved from ADIOS oil database distillation curves
 - **Biodegradation** — Q10-scaled first-order decay with droplet-size dependence and dissolved-phase pathway
 - **Photooxidation** — UV-driven aromatic degradation with Beer-Lambert depth attenuation; oxygenated photoproduct (OP) tracking with dissolved/degraded pools
-- **Emulsification** — Fingas & Fieldhouse viscosity-stability model with configurable rate scaling
+- **Emulsification** — Bullwinkle water uptake; the optional viscosity-stability scaling constants (`EMUL_*`) default to 1.0 (stock NOAA rate)
+- **Dispersion modes** — `processes:dispersion_mode` (`legacy` / `transport` / `budget`) avoids counting wave-breaking dispersion twice; Roy sink in the PyGNOME form, on surface elements only
+- **Gridded slick thickness** — optional `processes:slick_thickness_model=field` (`slick_field.py`): advected, spreading thickness field read by the evaporation
 - **TAMOC coupling** — Bent plume model output seeded as Lagrangian elements
 - **NEMO/CROCO readers** — Optimized NetCDF readers for regional ocean model output
 - **CROCO native reader** — `reader_croco_native` reads raw CROCO sigma-coordinate output (`croco_avg.nc` / `croco_his.nc`) directly, with correct C-grid de-staggering (see [Reading CROCO native output](#reading-croco-native-output))
@@ -168,6 +170,8 @@ The test suite covers:
 
 - **[CICOIL_v2_MANUAL.md](CICOIL_v2_MANUAL.md)** — Full manual: installation, deployment, weathering physics, parameter calibration
 - **[CICOIL_v2_REFERENCE.md](CICOIL_v2_REFERENCE.md)** — API reference: element variables, configuration keys, method signatures
+- **Coming from CICOIL v1?** Read §10B of the manual (what changes, why results differ, shared install on Ixachi). §10C lists changes after `b032140` (gas-bubble mask, `oil_density` ID fix, `vertical_profile.py`).
+- **Español:** [README_ES.md](README_ES.md), [CICOIL_v2_MANUAL_ES.md](CICOIL_v2_MANUAL_ES.md), [CICOIL_v2_REFERENCE_ES.md](CICOIL_v2_REFERENCE_ES.md)
 
 ## Authors
 

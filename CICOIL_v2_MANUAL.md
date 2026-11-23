@@ -4,8 +4,9 @@
 
 This manual merges and supersedes `cicoilv2/hpc_migration.md` (deployment
 workflow) and `DEPLOYMENT_MANIFEST.txt` (file inventory / API reference), and
-adds the photooxidation, biodegradation, and emulsification-fix modules
-developed through 2026-06-15.
+adds the photooxidation, biodegradation, and emulsification modules
+developed through 2026-06-15 and the weathering changes of October 2026
+(§8A, §8B, §10A). A Spanish translation is in `CICOIL_v2_MANUAL_ES.md`.
 
 **Active development copy:** `OILSPILL/CICOIL_dev/cicoilv2_deployment/`
 **Contact:** adomingu@cicese.edu.mx — CICESE, Departamento de Oceanografía Física
@@ -28,15 +29,15 @@ OpenDrift 1.14.9, plus three CICESE-developed improvements:
 - **Biodegradation** (`biodegradation_cicese()`) — component-resolved,
   temperature-scaled, with surface-slick suppression and a dissolved-phase
   pathway.
-- **Emulsification viscosity-stability fix** (`emulsification_cicese()`) —
-  viscosity-dependent scaling + empirical rate correction that prevents the
-  stock NOAA Bullwinkle model from producing instant (~5 h) mousse formation
-  and instead gives a physically calibrated ~17-day tar-ball transition for
-  MAYA crude.
+- **Emulsification** (`emulsification_cicese()`) — Bullwinkle water uptake
+  with optional viscosity-stability scaling (`EMUL_*` constants). The
+  tar-ball calibration of June 2026 was removed on 2026-10-29: the constants
+  are 1.0 (stock NOAA rate); see §8.
 
 Photooxidation and biodegradation are additive (off by default) and conserve
-mass exactly (rel. err ~1e-15–1e-16 in all test suites). The emulsification
-fix is always active when `processes:emulsification = True`.
+mass exactly (rel. err ~1e-15–1e-16 in all test suites). Emulsification is
+active when `processes:emulsification = True`. Changes since v2.0.0 are in
+§10A; users coming from CICOIL v1 should read §10B.
 
 ### What CICOIL adds over upstream OpenDrift 1.14.9 `OpenOil`
 - 17-component weathering (Cox vapor-pressure evaporation, Nihoul spreading,
@@ -215,8 +216,11 @@ print("CICOIL OK:", len(o.oiltypes), "oils,", len(o.fluid_properties.composition
 |---|---|---|
 | `processes:evaporation` | True | Cox Pv evaporation |
 | `processes:spreading` | True | Nihoul spreading |
-| `processes:emulsification` | True | Bullwinkle model (viscosity-stability fix active; see §8); needs `max_water>0` at seed time (see §9 caveat) |
-| `processes:dispersion` | True | Natural/wave dispersion |
+| `processes:emulsification` | True | Bullwinkle model (viscosity-stability scaling available through `EMUL_*`, neutral at the 1.0 default; see §8); needs `max_water>0` at seed time (see §9 caveat) |
+| `processes:dispersion` | False | Roy natural-dispersion mass sink (surface elements only; see `processes:dispersion_mode`, §8A) |
+| `processes:dispersion_mode` | `legacy` | NEW — `legacy` / `transport` / `budget`: which of the Roy sink and the Li entrainment act (§8A) |
+| `processes:slick_thickness_model` | `legacy` | NEW — `legacy` / `field`: gridded slick thickness read by the evaporation (§8B); `field` needs `processes:spreading` False |
+| `slick_field:*` | see Reference §3.3 | NEW — grid box (default Gulf of Mexico), `dx` 500 m, `lens_age`, `evaporation_thickness`, `drift_update_interval` |
 | `processes:chemical_dispersion` | False | Surface + SSDI dispersant model |
 | `processes:subsea_dissolution` | True | Feeds the dissolved-phase pool (§7.3) |
 | `processes:surface_dissolution` | False | |
@@ -500,18 +504,24 @@ where:
   `oil_weathering_cicese()`).
 - `EMUL_STABILITY_NU_REF = 1000.0 cSt` — reference viscosity around which
   the stability factor is centred (clip argument = 1.0 at `nu_dry = 1000 cSt`).
-- `EMUL_STABILITY_MIN = 0.3` — minimum stability factor (fresh, low-viscosity
-  oil emulsifies more slowly).
-- `EMUL_STABILITY_MAX = 3.0` — maximum stability factor (very viscous oil
-  emulsifies faster, up to 3×).
-- `EMUL_RATE_SCALE = 0.0142` — overall multiplicative correction (≈2 orders
-  of magnitude below the raw NOAA rate) needed because `EMUL_STABILITY_MIN/MAX`
-  alone (a ≤10× range) cannot supply the required ~100× rate reduction.
+- `EMUL_STABILITY_MIN = 1.0` — minimum stability factor (was 0.3).
+- `EMUL_STABILITY_MAX = 1.0` — maximum stability factor (was 3.0).
+- `EMUL_RATE_SCALE = 1.0` — overall multiplicative correction (was 0.0142).
 
-To recover the original (viscosity-independent) NOAA Bullwinkle behaviour
-exactly, set `EMUL_STABILITY_MIN = EMUL_STABILITY_MAX = EMUL_RATE_SCALE = 1.0`.
+> **Update 2026-10-29.** The three constants are back to 1.0 (class attributes
+> and `CICESE_DEFAULTS`), so the default is the stock NOAA Bullwinkle rate,
+> independent of viscosity. The tuning described in §8.2--§8.4 (0.3 / 3.0 /
+> 0.0142, fitted to a 17.2-day tar-ball target for Abkatun 2026) had no data
+> support: water uptake was about 70 times slower than the stock rate (water
+> fraction 0.12 after 48 h in the S0 Nohoch 2023 runs against 0.78 after 12 h in
+> v1), and the viscosity stayed near 1e-3 m² s⁻¹, so the Roy dispersion sink
+> never shut off (budget mode: 22 % dispersed against 4.4 % in PyGNOME). Results
+> quoted in §8.3--§8.4 and in §9 were obtained with the old values; runs that
+> set the constants at run time are unaffected. To reproduce them, set
+> `EMUL_STABILITY_MIN = 0.3`, `EMUL_STABILITY_MAX = 3.0`, `EMUL_RATE_SCALE = 0.0142`
+> on the class before seeding.
 
-### 8.3 Empirical calibration
+### 8.3 Empirical calibration (historical; constants reverted 2026-10-29, see the update above)
 
 Calibrated against a MAYA crude Abkatun 2026 TAMOC+GLORYS12 realistic run
 (`calibrate_emulsification_viscosity_tamoc.py`) using a 17.2-day surface tar-ball
@@ -552,7 +562,9 @@ dominant fate process for surface-released MAYA crude in the Bay of Campeche.
 
 ### 8.5 Unit test
 
-`test_emulsification_viscosity.py` (4/4 PASS):
+`test_emul_constants.py` checks (source level, plus class level when OpenDrift is importable) that the six constants are 1.0 / 1000.0 and that the rate formula is unchanged.
+
+`test_emulsification_viscosity.py` (4/4 PASS with the old defaults 0.3 / 3.0 / 0.0142). **Not updated for the 2026-10-29 revert:** checks 1, 3 and 4 compare against the old default scaling, so they are expected to fail with the 1.0 defaults until the test sets the old values explicitly:
 - cold oil (5°C, high viscosity → stability > 1.0) emulsifies faster than
   warm oil (30°C, lower viscosity → stability < 1.0)
 - with `EMUL_STABILITY_MIN=MAX=1.0`, cold==warm (viscosity-independence
@@ -560,6 +572,82 @@ dominant fate process for surface-released MAYA crude in the Bay of Campeche.
 - default stability always < unit stability (scaling suppresses rate for
   fresh MAYA)
 - `EMUL_RATE_SCALE=1.0` gives stock NOAA rate (much faster than default)
+
+---
+
+## 8A. Dispersion mode and Roy rate (`processes:dispersion_mode`)
+
+The Roy mass sink (`processes:dispersion`) and the Li et al. (2017)
+entrainment (`drift:vertical_mixing`) act on the same breaking-wave fraction,
+so oil can be counted twice. `processes:dispersion_mode` selects what acts:
+
+| Mode | Roy sink | Li entrainment |
+|---|---|---|
+| `legacy` (default) | on if `processes:dispersion` True | on |
+| `transport` | off | on: droplets enter the water column and can resurface |
+| `budget` | on if `processes:dispersion` True | off (PyGNOME/ADIOS style) |
+
+The default keeps existing configurations unchanged.
+
+Changes to the Roy sink itself (2026-10):
+- **Surface only.** It acts on elements with `z == 0`; oil already entrained
+  (`z < 0`) is no longer removed.
+- **PyGNOME rate.** The constant used `sqrt(viscosity / density)`, dividing a
+  kinematic viscosity by a density. It is now `sqrt(kinematic viscosity)` as in
+  PyGNOME `natural_dispersion.disperse_oil_DS`: for 9000 cSt the factor goes from
+  0.80 to 9e-4. The fraction is
+  `C_Roy · c_disp · V_entrain · dt / (emulsion_density · thickness)`, capped at 1
+  (function `roy_dispersed_fraction()`); thickness is the element's
+  `oil_film_thickness`. Viscous oil disperses far less.
+- **Not reproducible.** Runs with `processes:dispersion` True do not reproduce
+  output from before this change (smoke run, 23 elements: dispersed mass
+  112,971 → 10,434 kg).
+
+Tests: `test_dispersion.py` (20 checks: rate form, scaling, cap, thickness
+fallback, submerged elements keep their mass, six mode × `processes:dispersion`
+combinations).
+
+---
+
+## 8B. Gridded slick thickness (`processes:slick_thickness_model = field`)
+
+By default each element carries its own thickness (`spillet_thickness`,
+Nihoul spreading if `processes:spreading` is True). In `field` mode the
+evaporation reads the thickness of a gridded slick (`slick_field.py`, ported
+from PARCELS_GPU) that is advected by the surface drift and spread by the
+porous-medium equation, `dh/dt + div(h u) = D0 laplacian(h²)`, with `D0`
+calibrated to Fay's gravity-viscous regime II. Each step:
+
+1. the field is scaled by B/A, the emulsion volume of the elements that were on
+   the surface at the previous call, now and then (entrained and stranded oil
+   leave as a uniform loss);
+2. it is advected with the surface drift (current + windage, resampled every
+   `slick_field:drift_update_interval`) and spread;
+3. the volume of elements that reach the surface (release, resurfacing) is
+   added as Barenblatt lenses (`slick_field:lens_age`);
+4. each surface element inside the grid reads the thickness of its cell
+   (`spillet_thickness`, and `spillet_area` = oil volume / thickness).
+
+The field holds emulsion volume per area. `slick_field:evaporation_thickness`
+`oil` (default) gives the evaporation the oil layer, `h · V_oil / V_emulsion`;
+`emulsion` keeps the first version's behaviour (E1, 1000 m, day 30: evaporated
+27.4 % with `emulsion`, 28.5 % with `oil`).
+
+Constraints and limits:
+- Requires `processes:spreading` False and `processes:julia_weathering` False
+  (the model raises `ValueError` otherwise).
+- The grid box defaults to the Gulf of Mexico (`lon` −98..−87, `lat` 15..24.5)
+  with `dx` = 500 m; set the edges for another region. Oil outside the box keeps
+  its own thickness.
+- Not implemented: land stranding in the field (volume reaching land cells stays
+  in it), Stokes drift in the advection velocity, use of the field by
+  dispersion, emulsification and entrainment (they keep `oil_film_thickness`).
+- One-way coupling: the particles are not changed by the field except for the
+  thickness the evaporation reads.
+
+Tests: `test_slick_field.py` (11 checks: volume conservation, front radius
+within 0.7--1.3 % of Fay, translation, lens peak thickness), `test_slick_coupling.py`
+(9), `test_slick_lens_thickness.py` (10).
 
 ---
 
@@ -573,24 +661,37 @@ dominant fate process for surface-released MAYA crude in the Bay of Campeche.
 | `test_biodegradation_water.py` | Dissolved-pool decay/deactivation (20 particles, `is_dissolved=1`, 60 d, SST 10/20/30°C) | 10°C: 68.526% biodeg, 0/20 deactivated; 20°C: 96.882%, 0/20; 30°C: 99.043%, 20/20 deactivated; mass conservation ~1e-15 |
 | `test_droplet_size_biodeg.py` | Droplet-size-resolved biodegradation (audit #2; 90 particles, 4 diameter groups, 10 d, SST=20°C) | `frac_biodeg(0.1mm)=7.110% > frac_biodeg(1mm)=0.810% > frac_biodeg(1cm)=0.082%`; `diameter=0` == `diameter=1mm` (rel. diff 4.7e-8); mass conservation rel. err 1.22e-16 |
 | `test_op_tracking.py` | Oxygenated photoproduct tracking (audit #4; 100 particles, 8 d, SST=29°C, synthetic UV) | mass conservation incl. OP pools rel. err 1.22e-16; `mass_op_dissolved + mass_op_degraded == mass_photooxidized` (OP_DISSOLVED_FRACTION=0.5, exact); `mass_op_degraded > 0` (K_OP_REMOVAL decay active) |
-| `test_emulsification_viscosity.py` | Viscosity-stability scaling: cold oil emulsifies faster than warm; unit-stability recovers viscosity independence; default stability suppresses rate vs unity; EMUL_RATE_SCALE=1.0 recovers stock NOAA rate | 4/4 PASS |
+| `test_emulsification_viscosity.py` | Viscosity-stability scaling: cold oil emulsifies faster than warm; unit-stability recovers viscosity independence; default stability suppresses rate vs unity; EMUL_RATE_SCALE=1.0 recovers stock NOAA rate | 4/4 PASS with the old defaults; needs updating (§8.5) |
 
 | `test_horizontal_diffusivity.py` | Random walk with constant forcing, 6 h, 2000 particles: D=0 gives no spread; D=10 m² s⁻¹ via `drift:horizontal_diffusivity` or via the environment fallback spreads as √(2Dt) (659 m vs 657 m); D=40 spreads 2.00× D=10 | 4/4 PASS |
+| `test_dispersion.py` | Roy rate form, thickness/density scaling, cap at 1, submerged elements untouched, six dispersion_mode × `processes:dispersion` combinations | 20 checks |
+| `test_slick_field.py` / `test_slick_coupling.py` / `test_slick_lens_thickness.py` | Gridded slick: Fay front, conservation, coupling with the elements, oil vs emulsion thickness | 11 / 9 / 10 checks |
+| `test_evaporation_components.py` | Sum of `comp_*_evaporated` equals `mass_evaporated`; remaining + evaporated constant; residue does not evaporate | see file |
+| `test_local_sea_water_density.py` | Element T and S used for the sea-water density in weathering | see file |
+| `test_ift_units.py` | IFT in N/m (default 0.03) | see file |
+| `test_emul_constants.py` | Emulsification constants are 1.0 | see file |
 | `test_croco_native_reader.py` | `reader_croco_native` on a synthetic CROCO file: derived `mask_u`/`mask_v`, de-staggered `u`/`v` at a rho node equal the analytic value, `destagger=False` shows the stock half-cell offset | 7/7 PASS |
+| `test_deactivate_masks.py` | Released gas bubbles and depleted dissolved elements are deactivated with a boolean mask (OpenDrift 1.14.9 needs one); both runs complete | v2.1.0 |
+| `test_oil_density_ids.py` | Staggered plume seeding (gas, oil, dissolved): no oil element stays active with NaN mass (17 before the fix, 0 after) | v2.1.0 |
+| `test_vertical_profile.py` | `vertical_profile.sample_profile` on synthetic readers (raw columns, NaN below the seafloor kept, surface level added); TAMOC writer test is skipped when TAMOC is not installed | v2.1.0 |
 
 ### Known caveats
 - **Emulsification**: `max_water=0.9` required at `seed_elements()` for MAYA
   (ADIOS AD02254 has no emulsification data → `emulsification_cicese()` exits
-  immediately otherwise). Rate is calibrated for MAYA crude at 10 m/s wind
-  (17.2-day tar-ball target); re-calibrate `EMUL_RATE_SCALE` for other oils.
+  immediately otherwise). Since 2026-10-29 the rate is the stock NOAA one
+  (`EMUL_*` = 1.0); the old 17.2-day tar-ball calibration was removed (§8).
 - **ANFC vs GLORYS12**: ANFC ocean forcing gives non-reproducible results
   across download dates (80 km vs 151 km transport for the same nominal
   run). Use GLORYS12 (`--ocean glorys`) for reproducible hindcast
   attribution.
 - **Longitude sign**: Bay of Campeche is °W — use `lon=-92.x`, not `+92.x`
   (positive longitude silently places particles in the Indian Ocean).
-- **Mass scaling**: CICOIL enforces 185.6 kg/element; `m3_per_element` is
-  rejected. Scale outputs by `M_spill / (N_p × 185.6 kg)`.
+- **Mass per element**: CICOIL does not enforce a fixed mass per element; it
+  is the seeded oil mass divided by the number of elements. The value
+  185.6 kg inherited from v1 is not applied by the model (the Nohoch 2023
+  TAMOC script used it only to scale plots, against a real 0.31 kg per
+  element). Scale outputs by `M_spill / (N_p × mass per element)` using the
+  mass actually seeded (sum of `mass_oil` at the first output step).
 
 ---
 
@@ -598,11 +699,12 @@ dominant fate process for surface-released MAYA crude in the Bay of Campeche.
 
 **Core model:**
 - `ciceseoil.py` (142 KB) — `OpenCiceseOil` class, 14 API fixes, photooxidation + biodegradation + emulsification fix
+- `slick_field.py` — gridded slick-thickness field (§8B)
 - `fluid_properties.py` (19 KB) — 17-component distillation framework (Cox Pv + Mackay)
 - `cicoil_estimations.py` (13 KB) — standalone ADIOS-DB estimation workarounds
 
 **TAMOC coupling:**
-- `tamoc_plume.py`, `run_tamoc.py`, `tamoc_chemical_properties.py`
+- `tamoc_plume.py`, `run_tamoc.py`, `tamoc_chemical_properties.py`, `vertical_profile.py` (§10C)
 
 **NEMO/CROCO readers** (`readers/`):
 - `reader_NEMO_native_v3.py`, `reader_nemo_combined.py`, `reader_nemo_modified.py`, `reader_nemo_optimized.py`
@@ -636,6 +738,129 @@ Total: ~500 MB tarball, ~150 MB installed in site-packages.
 
 ---
 
+## 10A. Changes since 28f8cdb (2026-10-08), branch `physics/e1-weathering-fixes`
+
+| Change | Effect on results |
+|---|---|
+| Kelvin/Celsius in `diffusion_coeff_in_air` (`+ 273.15`) | Evaporation was 25--30 % too low in warm water (Abkatun fwd, 47 d: 0.1583 vs 0.2059 of the released mass) |
+| Element T and S for sea-water density (`local_sea_water_density()`) | Emulsion density about 3.2 kg m⁻³ too high before (30.2 °C, S 36.6: 1022.86 vs 1026.95 kg m⁻³) |
+| Roy dispersion on surface elements only; `sqrt(nu)` rate (§8A) | Much less dispersion of viscous oil; runs with `processes:dispersion` True change |
+| `processes:dispersion_mode` (§8A) | Default `legacy`: unchanged |
+| Gridded slick field and `processes:slick_thickness_model` (§8B) | Default `legacy`: unchanged |
+| `comp_*_evaporated` stores the cumulative evaporated mass (was the remaining mass) | Per-component outputs only; budgets unchanged (write-only variables) |
+| IFT in N/m, default 0.03 (was 30) | Li et al. (2017) entrainment rate and droplet spectrum now use N/m |
+| `EMUL_*` constants back to 1.0 (§8) | Runs without a run-time override emulsify faster |
+
+---
+
+## 10B. Migrating from CICOIL v1
+
+For users of CICOIL v1 (`Cicoil_Version_22-06-2023`, an OpenDrift 1.9.0 fork,
+TAMOC 3.4.0). v1 is frozen and will not be corrected; all development is in
+CICOILv2 (OpenDrift 1.14.9, TAMOC 4.1.2).
+
+### What changes for the user
+
+| Topic | v1 | CICOILv2 |
+|---|---|---|
+| Base | OpenDrift 1.9.0 fork | OpenDrift 1.14.9, unmodified; CICOIL files are copied into `opendrift/models/openoil/` |
+| TAMOC | 3.4.0 | 4.1.2 |
+| Lost particles | stored as `inf` / 1e37 | stored as NaN: use `np.nanmean` / `np.nansum` or filter by `status` |
+| Random numbers | — | pass `seed=` to the model constructor; OpenDrift owns its generator |
+| Config keys | the v1 reader rejects unknown keys | OpenDrift 1.14.9 keys, e.g. `drift:profiles_depth` (plural); copy an old configuration into a new script and let OpenDrift flag invalid keys |
+| ERA5 reader | fails on the scalar coordinates `number` / `expver` | reads them (v1 needed a preprocessed ERA5) |
+| CROCO output | needs conversion to z-levels on a regular grid | `reader_croco_native` reads raw sigma-coordinate output |
+| Photooxidation, biodegradation | not available | optional, off by default (§6, §7) |
+
+### Why v1 and CICOILv2 results differ
+
+Three bugs found while running v1 against OpenOil, PyGNOME and CICOILv2 on
+Nohoch 2023 change the v1 results (report `V1_BUGS` in `CICOIL_COMPARISON`):
+
+1. **Kelvin/Celsius** in `diffusion_coeff_in_air`: evaporation too low
+   (v2: 25–30 % in warm water).
+2. **Droplet terminal velocity**: the temperature in K enters the sea-water
+   density and the diameter is used where a radius is needed, so entrained
+   droplets return to the surface almost at once and v1 shows almost no
+   submerged oil.
+3. **Roy dispersion constant** uses `sqrt(nu/rho)` instead of `sqrt(nu)`
+   (same expression in stock OpenDrift 1.14.9): E1 disperses 92 % with the
+   coded form against 3.3 % with the PyGNOME form.
+
+CICOILv2 fixes all three. A v1 run and a v2 run with the same configuration
+are therefore not expected to agree, and the difference is not noise.
+
+### Shared installation on Ixachi (CICESE)
+
+All under `/LUSTRE/adomingu/CICOIL_SHARED` (read-only for users; copy what
+you need into your own space):
+
+- `env/cicoilv2`: conda environment with OpenDrift 1.14.9, CICOILv2 (commit
+  `b032140`) and TAMOC 4.1.2 (private patched copy in `src/tamoc_4.1.2`;
+  numpy 2.x needs `f2py --backend meson`). The package metadata of TAMOC says
+  4.0.0; `tamoc.__version__` says 4.1.2.
+- `examples/abkatun2026/inputs` (small GLORYS + ERA5 set) and
+  `examples/nohoch2023`: preprocessed forcing.
+- `ejemplo/abkatun2026.py` with `run_abkatun2026.slurm` (`MODE=2d|3d`,
+  `FORCING=coupled|glorys`, `DROPLETS=tamoc|default|lognormal:D50:SIGMA`);
+  `ejemplo/run_nohoch2023.slurm`.
+- `readers_check/` and `hpc/10_check_readers.slurm`: reader checks for CROCO
+  (native), WW3 and WRF (through CF files made by `prep_forcing.py`; OpenDrift
+  has no native WW3/WRF reader) and NEMO (skipped until a NEMO file is given).
+- No compute on the login node: everything through `sbatch` (partition
+  `oc_cpus`; `oc_gpu` for GPU).
+- Own environment: `deploy_on_hpc_conda.sh` (§2.2).
+
+### Pitfalls
+
+- **Longitude**: the Gulf is west, `lon=-92.x`; `+92` places particles in the
+  Indian Ocean without a warning.
+- **`max_water`**: without `max_water=0.9` in `seed_elements()` MAYA does not
+  emulsify.
+- **Reproducibility**: runs made with `processes:dispersion` True before
+  October 2026 are not reproduced (§8A).
+- Store the seed and the commit with each result.
+
+### Validation status
+
+- S0 (Nohoch 2023, day 30, `EMUL_*` = 1.0): `budget` mode 2.1 % dispersed /
+  26.9 % evaporated / 71.0 % left; `legacy` 1.7 / 23.8 / 74.6; PyGNOME
+  4.4 / 24.4 / 70.6. `budget` is 2.3 points below PyGNOME in dispersion; the
+  cause traced is the timing of emulsification onset (CICOIL hard-codes 2 h;
+  PyGNOME uses the oil record's Bullwinkle fraction), not slick thickness.
+- Open: SAR-based criterion; default `dispersion_mode` for E1; PyGNOME
+  element-mass scale; subsurface fields of `reader_croco_native`.
+
+---
+
+## 10C. Changes after b032140 (included in v2.1.0)
+
+| Branch | Change | Effect on results |
+|---|---|---|
+| `fix/gas-bubble-mask` | `handle_gas_particles` and `handle_subsea_dissolution` pass a boolean mask to `deactivate_elements` (OpenDrift 1.14.9 raises a broadcast error with integer indices) | Runs with gas bubbles (`is_bubble=1`) or depleted dissolved elements stopped at the first step before; none otherwise |
+| `fix/gas-bubble-mask` | `oil_density` indexes `cicese_mass_balance` by element ID, as `component_molfrac` does (it used array positions; v1 used `indices - 1`) | Identical while all elements are seeded together and none is removed. With staggered seeding (TAMOC plumes) or removed elements, oil elements read another element's mass row, kept status 0 with NaN density and mass and left the budget (Abkatun 2026 3D: 119 of 427 elements, closure 67 %). Runs where elements were removed mid-run (stranding, leaving the domain) have not been audited |
+| `feat/vertical-profile` | New `vertical_profile.py`: `create_profile()` builds the TAMOC ambient profile (T, S, u, v at depth) from OpenDrift readers; `sample_profile()` returns the columns | Needed for the TAMOC route below; no effect on other runs |
+
+### TAMOC route (as in v1)
+
+1. `get_live_composition` for the oil and gas;
+2. `vertical_profile.create_profile(nc_file, readers, lon, lat, time, ...)`
+   writes the ambient profile; it reads the raw nearest-cell column with
+   `reader.get_variables`, not `get_variables_interpolated`, which fills NaN
+   (seafloor, land) from neighbours and returns stale vertical blocks when
+   called level by level;
+3. `run_tamoc` runs the bent-plume model;
+4. `Plume(tracked=False)`: TAMOC 4.1.2 does not write per-particle track
+   files, so `tracked=True` fails;
+5. `seed_plume_elements(seed_time=[start, end])`.
+
+The forcing must have vertical levels: the Abkatun 2026 GLORYS/ANFC files
+have one level (0.49 m); the 3D example uses the coupled CROCO-WRF-WW3 files
+(10 levels). `create_profile(..., z_max=depth+20)` extends the column below
+the release depth.
+
+---
+
 ## 11. References
 
 - Adcroft et al. (2010) — Q10=3, T_REF=20°C temperature-scaling law for
@@ -661,5 +886,5 @@ Total: ~500 MB tarball, ~150 MB installed in site-packages.
 
 ---
 
-**Version:** CICOILv2.0
-**Last updated:** 2026-06-14
+**Version:** CICOILv2 (release `v2.1.0`: `b032140` plus the changes of §10C)
+**Last updated:** 2026-11-17
