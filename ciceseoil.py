@@ -999,7 +999,9 @@ class OpenCiceseOil(OpenOil):
 
     def oil_density(self, indices):
 
-        surfaceID = indices  # BC-2: OD 1.14.9 uses 0-based element IDs (was -1)
+        # `indices` are array positions; cicese_mass_balance is keyed by element ID (0-based in OD 1.14.9, as in
+        # component_molfrac). Positions equal IDs only while every element is seeded at once and none is removed.
+        surfaceID = self.elements.ID[indices]
         mass_component = self.cicese_mass_balance['mass_components'][surfaceID, :]
         surf_no = len(indices)
         density_component = self.fluid_properties.component_density * (np.ones(surf_no).reshape((surf_no, -1)))
