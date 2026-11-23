@@ -1449,8 +1449,11 @@ class OpenCiceseOil(OpenOil):
 
     def handle_gas_particles(self):
         """for now gas bubble mass is recorded and gas bubbles are deactivated """
-        bubbles = np.where(self.elements.is_bubble == 1)[0]
-        if len(bubbles) > 0:
+        # OpenDrift 1.14.9 deactivate_elements() needs a boolean mask (it computes `indices & (status == 0)`), not integer
+        # indices: with integer indices this raised "operands could not be broadcast together" as soon as bubbles were
+        # seeded among other elements (found with the Abkatun 2026 TAMOC example; test_deactivate_masks.py).
+        bubbles = self.elements.is_bubble == 1
+        if np.any(bubbles):
             self.deactivate_elements(bubbles, reason='released_gas')
 
 
@@ -1498,7 +1501,10 @@ class OpenCiceseOil(OpenOil):
                                 self.BIODEG_WATER_DEPLETION_FRAC * initial_dissolved[mask_init])
         to_deactivate = dissolved[depleted & ~not_yet_transferred]
         if len(to_deactivate) > 0:
-            self.deactivate_elements(to_deactivate, reason='dissolved_biodegraded')
+            # boolean mask over the active elements, as OpenDrift 1.14.9 deactivate_elements() requires (see handle_gas_particles)
+            mask = np.zeros(len(self.elements.is_dissolved), dtype=bool)
+            mask[to_deactivate] = True
+            self.deactivate_elements(mask, reason='dissolved_biodegraded')
 
 
     def _roy_sink_enabled(self):
