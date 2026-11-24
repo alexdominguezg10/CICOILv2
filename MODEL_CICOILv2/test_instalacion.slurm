@@ -37,7 +37,8 @@ for t in test_deactivate_masks test_oil_density_ids test_vertical_profile; do
 done
 
 echo "== prueba de edición: una línea agregada a ciceseoil.py debe verse al importar"
-echo "CICOIL_EDIT_TEST = 42" >> $REPO/ciceseoil.py
+cp $REPO/ciceseoil.py $REPO/ciceseoil.py.bak_test
+printf '\nCICOIL_EDIT_TEST = 42\n' >> $REPO/ciceseoil.py      # ciceseoil.py no termina en salto de línea
 python -c "import opendrift.models.openoil.ciceseoil as m; assert m.CICOIL_EDIT_TEST == 42; print('edición de ciceseoil.py usada: OK')"
-sed -i '/^CICOIL_EDIT_TEST = 42$/d' $REPO/ciceseoil.py
+mv $REPO/ciceseoil.py.bak_test $REPO/ciceseoil.py        # deshacer la prueba
 echo "DONE $(date)"

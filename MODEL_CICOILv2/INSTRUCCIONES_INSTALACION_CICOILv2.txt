@@ -56,6 +56,23 @@ OPCIONAL/info extra:
 ----------JUPYTER / SPYDER-----------
   Ver agregar_kernel_JupyterLab_cicoilv2.txt y cicoilv2.slurm.  Spyder:  conda install spyder  (con el ambiente activo)
 
+----------LAPTOP (Linux)-----------
+  Los mismos pasos 1 a 6, sin nodo de cómputo ni Slurm: todo en su terminal, en la carpeta que quiera (en lugar de /LUSTRE/$USER).
+  Requisitos del sistema (el .yml solo trae las bibliotecas): git, conda (miniconda o miniforge), compilador de C y de Fortran
+      sudo apt install git build-essential gfortran          (Debian/Ubuntu; en otras distribuciones, los paquetes equivalentes)
+      o, dentro del ambiente:  conda install -c conda-forge gfortran gcc_linux-64
+  El .yml es para Linux de 64 bits (x86_64). Pasos:
+      mkdir -p ~/MODEL_CICOILv2 && cd ~/MODEL_CICOILv2
+      git clone -b group/oilspill-install https://github.com/alexdominguezg10/CICOILv2.git
+      conda config --add channels conda-forge
+      conda env create -f CICOILv2/MODEL_CICOILv2/entorno_cicoilv2.yml
+      conda activate cicoilv2
+      bash CICOILv2/MODEL_CICOILv2/instalar_cicoilv2.sh preparar
+      bash CICOILv2/MODEL_CICOILv2/instalar_cicoilv2.sh instalar
+      cd CICOILv2 && python test_deactivate_masks.py && python test_oil_density_ids.py && python test_vertical_profile.py
+  Los ejemplos de examples/ixachi/ usan rutas de Ixachi (/LUSTRE/...); en la laptop cambie las rutas de los datos (opciones --forcing-dir, --out).
+  Prueba completa en un solo comando:  DEST=~/MODEL_CICOILv2 ENVPREFIX=~/MODEL_CICOILv2/env_cicoilv2 bash CICOILv2/MODEL_CICOILv2/test_instalacion.sh
+
 ----------Compilador-----------
   TAMOC compila partes en Fortran. En el nodo de cómputo, con el ambiente activo:  gfortran --version
   Si no aparece:  conda install -c conda-forge gfortran
