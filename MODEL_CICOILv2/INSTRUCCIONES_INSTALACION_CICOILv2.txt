@@ -1,6 +1,6 @@
 ----------CICOILv2-----------
 (Mismo esquema que CICOIL_instrucciones_install.txt de CICOIL v1: cada persona crea su propio ambiente y trabaja en su
-propia copia de ciceseoil.py y de TAMOC. Escrito para Ixachi; branch del grupo: group/oilspill-install)
+propia copia de ciceseoil.py y de TAMOC. Escrito para Ixachi y laptops Linux; se clona la rama main)
 
 Estructura que va a tener (parecida a MODEL_CICOIL de v1):
 
@@ -12,7 +12,7 @@ Estructura que va a tener (parecida a MODEL_CICOIL de v1):
 1.- Descargar (login node de Ixachi, solo clonar)
 
   mkdir -p /LUSTRE/$USER/MODEL_CICOILv2 && cd /LUSTRE/$USER/MODEL_CICOILv2
-  git clone -b group/oilspill-install https://github.com/alexdominguezg10/CICOILv2.git
+  git clone https://github.com/alexdominguezg10/CICOILv2.git
   cd CICOILv2
 
 2.- Crear el ambiente (pesa: nodo de cómputo, p. ej.  srun --partition=oc_cpus --cpus-per-task=4 --mem=16G --pty bash)
@@ -63,7 +63,7 @@ OPCIONAL/info extra:
       o, dentro del ambiente:  conda install -c conda-forge gfortran gcc_linux-64
   El .yml es para Linux de 64 bits (x86_64). Pasos:
       mkdir -p ~/MODEL_CICOILv2 && cd ~/MODEL_CICOILv2
-      git clone -b group/oilspill-install https://github.com/alexdominguezg10/CICOILv2.git
+      git clone https://github.com/alexdominguezg10/CICOILv2.git
       conda config --add channels conda-forge
       conda env create -f CICOILv2/MODEL_CICOILv2/entorno_cicoilv2.yml
       conda activate cicoilv2

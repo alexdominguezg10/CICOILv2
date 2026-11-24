@@ -1,6 +1,6 @@
 #!/bin/bash
 # Prueba de instalación desde cero en una laptop o cualquier máquina Linux (sin Slurm): pasos 2, 4 y 5 de las instrucciones + prueba de edición.
-# Antes:  mkdir -p $DEST && cd $DEST && git clone -b group/oilspill-install https://github.com/alexdominguezg10/CICOILv2.git
+# Antes:  mkdir -p $DEST && cd $DEST && git clone https://github.com/alexdominguezg10/CICOILv2.git
 #         bash CICOILv2/MODEL_CICOILv2/instalar_cicoilv2.sh preparar
 # Luego:  DEST=$DEST ENVPREFIX=$DEST/env_cicoilv2 bash $DEST/CICOILv2/MODEL_CICOILv2/test_instalacion.sh
 # (ENVNAME=cicoilv2 en lugar de ENVPREFIX para un ambiente con nombre.)  Necesita conda (miniconda/miniforge), gcc y gfortran.
