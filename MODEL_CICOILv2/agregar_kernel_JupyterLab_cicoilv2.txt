@@ -1,0 +1,17 @@
+#----- Agregar JupyterLab al ambiente de CICOILv2 (Ixachi) -----------------
+"todo esto realizarlo en su cuenta de Ixachi, en un nodo de cómputo"
+
+#instalar el kernel
+# cargar ambiente
+    conda activate cicoilv2 (nombre de su ambiente)
+    conda install -c conda-forge ipykernel notebook -y
+
+#Registrar el kernel
+
+    python -m ipykernel install --user --name cicoilv2 --display-name "Python (cicoilv2)"
+
+#---------- directiva con SBATCH ------------------------------------
+
+copiar el archivo cicoilv2.slurm a su directorio de trabajo
+modificar la línea  conda activate cicoilv2  poniendo el nombre de su ambiente
+así como el nombre del trabajo y los archivos de salida y de error
