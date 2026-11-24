@@ -833,13 +833,29 @@ Nohoch 2023 cambian los resultados de v1 (informe `V1_BUGS` en
 CICOILv2 corrige los tres. Por lo tanto, no se espera que una corrida de v1 y
 una de v2 con la misma configuración coincidan, y la diferencia no es ruido.
 
+### Instalación para el grupo: ambiente propio, TAMOC editable, archivos del modelo que usted puede modificar
+
+Para quienes modifican `ciceseoil.py`, OpenDrift o TAMOC (la forma de trabajo de v1), cada persona construye su propia copia; el entorno
+compartido de solo lectura que sigue es solo una referencia. Pasos en `MODEL_CICOILv2/INSTRUCCIONES_INSTALACION_CICOILv2.txt`, también para laptops Linux:
+
+1. `conda env create -f MODEL_CICOILv2/entorno_cicoilv2.yml` (Python 3.10, numpy 2.x, `opendrift==1.14.9`, linux-64).
+2. `bash MODEL_CICOILv2/instalar_cicoilv2.sh preparar` clona TAMOC en el commit `f689dc7` de upstream (el que introdujo la entrada V4.1.2 de
+   `CHANGES.txt`) en `../tamoc` y aplica `MODEL_CICOILv2/tamoc_patches/tamoc_f689dc7_cicoil.patch`: `f2py --backend meson` para numpy 2.x,
+   una corrección de escalar numpy en `single_bubble_model.py` y las filas de PAH (criseno, fluoreno, naftaleno, fenantreno, pireno) en
+   `ChemData.csv`. Necesita git y red (login node en Ixachi).
+3. `bash MODEL_CICOILv2/instalar_cicoilv2.sh instalar` (nodo de cómputo en Ixachi) instala TAMOC editable y enlaza los archivos de CICOIL del
+   clon dentro del OpenDrift instalado: los cambios a `ciceseoil.py` se usan de inmediato y aparecen en `git diff`. OpenDrift es el paquete
+   de pip; para modificarlo con seguimiento en git, instale un clon propio con `pip install -e`.
+
+Verificado desde cero en Ixachi (trabajo 22847) y en una máquina Linux local: ambiente, compilación de TAMOC, enlaces,
+`test_deactivate_masks.py`, `test_oil_density_ids.py`, `test_vertical_profile.py` y que una edición de `ciceseoil.py` se usa. No probado en macOS ni Windows.
+
 ### Instalación compartida en Ixachi (CICESE)
 
 Todo en `/LUSTRE/adomingu/CICOIL_SHARED` (solo lectura para los usuarios;
 copie a su espacio lo que necesite):
 
-- `env/cicoilv2`: entorno conda con OpenDrift 1.14.9, CICOILv2 (commit
-  `b032140`) y TAMOC 4.1.2 (copia privada parchada en `src/tamoc_4.1.2`; con
+- `env/cicoilv2` (CICOILv2 commit `b032140`) y `env/cicoilv2_v2.1.0` (versión v2.1.0): entornos conda con OpenDrift 1.14.9 y TAMOC 4.1.2 (copia privada parchada en `src/tamoc_4.1.2`; con
   numpy 2.x hace falta `f2py --backend meson`). Los metadatos del paquete TAMOC
   dicen 4.0.0; `tamoc.__version__` dice 4.1.2.
 - `examples/abkatun2026/inputs` (conjunto pequeño GLORYS + ERA5) y

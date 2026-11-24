@@ -27,6 +27,23 @@ CICOILv2 extends [OpenDrift](https://github.com/OpenDrift/opendrift) (v1.14.9) w
 
 ## Installation
 
+### Group install (Ixachi or Linux laptop): own environment, TAMOC and model files you can modify
+
+Step-by-step notes (Spanish, v1 style): [`MODEL_CICOILv2/INSTRUCCIONES_INSTALACION_CICOILv2.txt`](MODEL_CICOILv2/INSTRUCCIONES_INSTALACION_CICOILv2.txt). In short:
+
+```bash
+git clone https://github.com/alexdominguezg10/CICOILv2.git && cd CICOILv2
+conda env create -f MODEL_CICOILv2/entorno_cicoilv2.yml        # Python 3.10, numpy 2.x, OpenDrift 1.14.9 (linux-64)
+conda activate cicoilv2
+bash MODEL_CICOILv2/instalar_cicoilv2.sh preparar               # clones TAMOC at f689dc7 into ../tamoc and applies our patch (needs git)
+bash MODEL_CICOILv2/instalar_cicoilv2.sh instalar               # TAMOC editable + links this repo's CICOIL files into OpenDrift
+```
+
+The CICOIL files are *linked* into the installed OpenDrift, so editing `ciceseoil.py` in your clone takes effect at once and shows in `git diff`.
+It needs `gcc` and `gfortran` (TAMOC has Fortran parts); on Ixachi use a compute node for the last step. Verified from scratch on Ixachi and on a Linux machine.
+
+### Manual install (copy the files into OpenDrift)
+
 CICOILv2 operates as an in-place extension of OpenDrift. Install OpenDrift first, then place the CICOILv2 files in the OpenDrift package directory:
 
 ```bash
@@ -48,7 +65,7 @@ cp -r data/* "$SITE/models/openoil/data/"
 cp export/io_stat_nc.py "$SITE/export/"
 ```
 
-For HPC deployment (CHAMAN2), see `deploy_on_hpc_conda.sh`.
+For HPC deployment (CHAMAN2), see `deploy_on_hpc_conda.sh`. Ready-to-run Abkatun 2026 (2D and 3D TAMOC), Nohoch 2023 and reader-check scripts for Ixachi are in [`examples/ixachi/`](examples/ixachi/).
 
 ## Quick start
 
