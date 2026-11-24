@@ -7,7 +7,7 @@
 #SBATCH -o cicoilv2_install_%j.out
 # Prueba de instalación desde cero (pasos 2, 4 y 5 de INSTRUCCIONES_INSTALACION_CICOILv2.txt) más una prueba de edición de ciceseoil.py.
 # Antes, en el login node (necesita git y red):
-#   mkdir -p $DEST && cd $DEST && git clone -b group/oilspill-install https://github.com/alexdominguezg10/CICOILv2.git   (o copie el repositorio a $DEST/CICOILv2)
+#   mkdir -p $DEST && cd $DEST && git clone https://github.com/alexdominguezg10/CICOILv2.git   (o copie el repositorio a $DEST/CICOILv2)
 #   bash $DEST/CICOILv2/MODEL_CICOILv2/instalar_cicoilv2.sh preparar
 # Luego:  sbatch --export=ALL,DEST=$DEST,ENVPREFIX=$DEST/env_cicoilv2 $DEST/CICOILv2/MODEL_CICOILv2/test_instalacion.slurm
 # Para una instalación normal use  ENVNAME=cicoilv2  en lugar de ENVPREFIX.
