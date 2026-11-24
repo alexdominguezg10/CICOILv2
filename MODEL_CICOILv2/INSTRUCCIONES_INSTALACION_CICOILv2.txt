@@ -1,0 +1,81 @@
+----------CICOILv2-----------
+(Mismo esquema que CICOIL_instrucciones_install.txt de CICOIL v1: cada persona crea su propio ambiente y trabaja en su
+propia copia de ciceseoil.py y de TAMOC. Escrito para Ixachi; branch del grupo: group/oilspill-install)
+
+Estructura que va a tener (parecida a MODEL_CICOIL de v1):
+
+  <su carpeta>/CICOILv2/              este repositorio: ciceseoil.py, fluid_properties.py, readers/, data/, pruebas test_*.py, ...
+      MODEL_CICOILv2/                 estas instrucciones, entorno_cicoilv2.yml, instalar_cicoilv2.sh, cicoilv2.slurm, tamoc_patches/
+  <su carpeta>/tamoc/                 TAMOC 4.1.2 (se clona en el paso 3)
+  OpenDrift 1.14.9                    se instala en el ambiente conda (paso 2); los archivos de CICOILv2 se enlazan dentro de él (paso 4)
+
+1.- Descargar (login node de Ixachi, solo clonar)
+
+  mkdir -p /LUSTRE/$USER/MODEL_CICOILv2 && cd /LUSTRE/$USER/MODEL_CICOILv2
+  git clone -b group/oilspill-install https://github.com/alexdominguezg10/CICOILv2.git
+  cd CICOILv2
+
+2.- Crear el ambiente (pesa: nodo de cómputo, p. ej.  srun --partition=oc_cpus --cpus-per-task=4 --mem=16G --pty bash)
+
+  source /data/apps/python/miniforge2025/etc/profile.d/conda.sh      (o: module load miniforge3)
+  conda config --add channels conda-forge
+  conda env create -f MODEL_CICOILv2/entorno_cicoilv2.yml
+  conda activate cicoilv2          (puede cambiar el nombre del ambiente en la primera línea del .yml)
+  (este .yml ya instala OpenDrift 1.14.9 con pip)
+
+3.- TAMOC (login node: necesita git y red; los nodos de cómputo no tienen git)
+
+  bash MODEL_CICOILv2/instalar_cicoilv2.sh preparar
+  (clona TAMOC junto a CICOILv2, en la carpeta ../tamoc, y aplica nuestro parche)
+
+4.- Instalar TAMOC editable y enlazar los archivos de CICOILv2 dentro de OpenDrift (nodo de cómputo, ambiente activo)
+
+  bash MODEL_CICOILv2/instalar_cicoilv2.sh instalar
+  (requiere el compilador de Fortran; ver "Compilador")
+
+5.- Probar la instalación (nodo de cómputo, ambiente activo, desde CICOILv2/)
+
+  python test_deactivate_masks.py
+  python test_oil_density_ids.py
+  python test_vertical_profile.py
+  (cada una termina con ALL PASSED / PASSED)
+
+6.- Modificar el modelo
+
+  ciceseoil.py y los demás archivos de CICOIL están en CICOILv2/ (fluid_properties.py, tamoc_plume.py, readers/, ...).
+  Están enlazados dentro de OpenDrift: los cambios se usan en cuanto se guardan. Use  git diff / git commit  en CICOILv2/.
+  TAMOC está en ../tamoc/tamoc/ (instalación editable, también es un repositorio git con rama cicoil-4.1.2).
+  OpenDrift está instalado en el ambiente (no es una copia suya): para modificarlo y registrar los cambios, clone su repositorio y use
+  pip install -e en ese clon con el ambiente activo.
+
+7.- Ejemplos
+
+  CICOILv2/examples/ixachi/   (Abkatun 2026 en 2D y 3D con TAMOC, Nohoch 2023, verificación de lectores)
+
+OPCIONAL/info extra:
+----------JUPYTER / SPYDER-----------
+  Ver agregar_kernel_JupyterLab_cicoilv2.txt y cicoilv2.slurm.  Spyder:  conda install spyder  (con el ambiente activo)
+
+----------LAPTOP (Linux)-----------
+  Los mismos pasos 1 a 6, sin nodo de cómputo ni Slurm: todo en su terminal, en la carpeta que quiera (en lugar de /LUSTRE/$USER).
+  Requisitos del sistema (el .yml solo trae las bibliotecas): git, conda (miniconda o miniforge), compilador de C y de Fortran
+      sudo apt install git build-essential gfortran          (Debian/Ubuntu; en otras distribuciones, los paquetes equivalentes)
+      o, dentro del ambiente:  conda install -c conda-forge gfortran gcc_linux-64
+  El .yml es para Linux de 64 bits (x86_64). Pasos:
+      mkdir -p ~/MODEL_CICOILv2 && cd ~/MODEL_CICOILv2
+      git clone -b group/oilspill-install https://github.com/alexdominguezg10/CICOILv2.git
+      conda config --add channels conda-forge
+      conda env create -f CICOILv2/MODEL_CICOILv2/entorno_cicoilv2.yml
+      conda activate cicoilv2
+      bash CICOILv2/MODEL_CICOILv2/instalar_cicoilv2.sh preparar
+      bash CICOILv2/MODEL_CICOILv2/instalar_cicoilv2.sh instalar
+      cd CICOILv2 && python test_deactivate_masks.py && python test_oil_density_ids.py && python test_vertical_profile.py
+  Los ejemplos de examples/ixachi/ usan rutas de Ixachi (/LUSTRE/...); en la laptop cambie las rutas de los datos (opciones --forcing-dir, --out).
+  Prueba completa en un solo comando:  DEST=~/MODEL_CICOILv2 ENVPREFIX=~/MODEL_CICOILv2/env_cicoilv2 bash CICOILv2/MODEL_CICOILv2/test_instalacion.sh
+
+----------Compilador-----------
+  TAMOC compila partes en Fortran. En el nodo de cómputo, con el ambiente activo:  gfortran --version
+  Si no aparece:  conda install -c conda-forge gfortran
+
+----------Actualizar-----------
+  cd CICOILv2 && git pull   (sus cambios en ciceseoil.py se fusionan; si hay conflicto, git le indicará los archivos)
