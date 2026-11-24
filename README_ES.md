@@ -29,6 +29,23 @@ CICOILv2 extiende [OpenDrift](https://github.com/OpenDrift/opendrift) (v1.14.9) 
 
 ## Instalación
 
+### Instalación para el grupo (Ixachi o laptop Linux): ambiente propio, TAMOC y archivos del modelo que usted puede modificar
+
+Pasos detallados: [`MODEL_CICOILv2/INSTRUCCIONES_INSTALACION_CICOILv2.txt`](MODEL_CICOILv2/INSTRUCCIONES_INSTALACION_CICOILv2.txt). En resumen:
+
+```bash
+git clone https://github.com/alexdominguezg10/CICOILv2.git && cd CICOILv2
+conda env create -f MODEL_CICOILv2/entorno_cicoilv2.yml        # Python 3.10, numpy 2.x, OpenDrift 1.14.9 (linux-64)
+conda activate cicoilv2
+bash MODEL_CICOILv2/instalar_cicoilv2.sh preparar               # clona TAMOC (commit f689dc7) en ../tamoc y aplica nuestro parche (necesita git)
+bash MODEL_CICOILv2/instalar_cicoilv2.sh instalar               # TAMOC editable + enlaza los archivos de CICOIL de este repositorio en OpenDrift
+```
+
+Los archivos de CICOIL se *enlazan* dentro del OpenDrift instalado: al editar `ciceseoil.py` en su clon el cambio se usa de inmediato y aparece en `git diff`.
+Se necesitan `gcc` y `gfortran` (TAMOC tiene partes en Fortran); en Ixachi use un nodo de cómputo para el último paso. Verificado desde cero en Ixachi y en una máquina Linux.
+
+### Instalación manual (copiar los archivos en OpenDrift)
+
 CICOILv2 opera como una extensión en sitio de OpenDrift. Instale primero OpenDrift y luego coloque los archivos de CICOILv2 en el directorio del paquete de OpenDrift:
 
 ```bash
@@ -50,7 +67,7 @@ cp -r data/* "$SITE/models/openoil/data/"
 cp export/io_stat_nc.py "$SITE/export/"
 ```
 
-Para el despliegue en HPC (CHAMAN2), véase `deploy_on_hpc_conda.sh`. En Ixachi existe un entorno compartido; véase §10B del manual.
+Para el despliegue en HPC (CHAMAN2), véase `deploy_on_hpc_conda.sh`. En Ixachi existe un entorno compartido; véase §10B del manual. Los scripts listos para correr (Abkatun 2026 en 2D y 3D con TAMOC, Nohoch 2023, verificación de lectores) están en [`examples/ixachi/`](examples/ixachi/).
 
 ## Inicio rápido
 
